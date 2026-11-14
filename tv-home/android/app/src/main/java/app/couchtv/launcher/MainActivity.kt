@@ -49,6 +49,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import kotlin.math.roundToInt
 
 /**
  * The TV home screen. Shows the page the bridge serves at /tv/ full screen. If the bridge cannot be
@@ -581,6 +582,58 @@ class MainActivity : Activity() {
 
         @JavascriptInterface
         fun launch(pkg: String): Boolean = launchPackage(pkg)
+
+        /** Fetch weather on Android's network stack when a TV WebView cannot make a cross-origin request. */
+        @JavascriptInterface
+        fun weather(lat: String, lon: String, timezone: String, callback: String): Boolean {
+            val latitude = lat.toDoubleOrNull() ?: return false
+            val longitude = lon.toDoubleOrNull() ?: return false
+            if (!latitude.isFinite() || !longitude.isFinite() || latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return false
+            if (!callback.matches(Regex("[A-Za-z0-9_-]{1,64}"))) return false
+            io.execute {
+                val result = try {
+                    val tz = timezone.take(100).takeIf { it.matches(Regex("[A-Za-z0-9_+./-]+")) } ?: "auto"
+                    val url = Uri.parse("https://api.open-meteo.com/v1/forecast").buildUpon()
+                        .appendQueryParameter("latitude", latitude.toString())
+                        .appendQueryParameter("longitude", longitude.toString())
+                        .appendQueryParameter("current", "temperature_2m,weather_code,is_day")
+                        .appendQueryParameter("daily", "temperature_2m_max,temperature_2m_min,weather_code")
+                        .appendQueryParameter("timezone", tz)
+                        .appendQueryParameter("forecast_days", "5").build().toString()
+                    val conn = URL(url).openConnection() as HttpURLConnection
+                    conn.connectTimeout = 7000
+                    conn.readTimeout = 7000
+                    conn.setRequestProperty("Accept", "application/json")
+                    try {
+                        if (conn.responseCode !in 200..299) throw java.io.IOException("Weather HTTP ${conn.responseCode}")
+                        val source = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+                        val current = source.getJSONObject("current")
+                        val daily = source.optJSONObject("daily") ?: JSONObject()
+                        val code = current.optInt("weather_code", -1)
+                        val dates = daily.optJSONArray("time") ?: JSONArray()
+                        val highs = daily.optJSONArray("temperature_2m_max")
+                        val lows = daily.optJSONArray("temperature_2m_min")
+                        val codes = daily.optJSONArray("weather_code")
+                        val days = JSONArray()
+                        for (i in 0 until minOf(5, dates.length())) {
+                            val day = JSONObject().put("date", dates.optString(i)).put("code", codes?.optInt(i, -1) ?: -1)
+                            val high = highs?.optDouble(i, Double.NaN) ?: Double.NaN
+                            val low = lows?.optDouble(i, Double.NaN) ?: Double.NaN
+                            day.put("high", if (high.isFinite()) high.roundToInt() else JSONObject.NULL)
+                            day.put("low", if (low.isFinite()) low.roundToInt() else JSONObject.NULL)
+                            days.put(day)
+                        }
+                        JSONObject().put("temp", current.getDouble("temperature_2m").roundToInt())
+                            .put("code", code).put("text", "").put("is_day", current.optInt("is_day", 0) == 1)
+                            .put("forecast", days).toString()
+                    } finally { conn.disconnect() }
+                } catch (e: Exception) {
+                    JSONObject().put("error", e.message ?: "Weather request failed").toString()
+                }
+                main.post { js("window.__tvWeatherDone && window.__tvWeatherDone(${JSONObject.quote(callback)}, ${JSONObject.quote(result)})") }
+            }
+            return true
+        }
 
         /** Opens an http(s) web link in the TV's browser (used by custom cards with a url). */
         @JavascriptInterface

@@ -2242,7 +2242,7 @@ async def h_idle_cancel(request):
 
 
 # ---------- weather for the home (Open-Meteo: free, no account, no key) ----------
-# The place comes from "weather" in config.json. Fetched at most every 30 minutes.
+# Weather for config.json and optionally the location selected on the TV. Cached for 30 minutes.
 WEATHER_AT = {k: config.WEATHER[k] for k in ("lat", "lon", "place")}
 WEATHER_EVERY = 30 * 60
 WMO = {0: "Clear", 1: "Mostly clear", 2: "Partly cloudy", 3: "Cloudy", 45: "Fog", 48: "Fog",
@@ -2250,20 +2250,25 @@ WMO = {0: "Clear", 1: "Mostly clear", 2: "Partly cloudy", 3: "Cloudy", 45: "Fog"
        61: "Light rain", 63: "Rain", 65: "Heavy rain", 66: "Rain", 67: "Rain",
        80: "Showers", 81: "Showers", 82: "Heavy showers", 95: "Storms", 96: "Storms", 99: "Storms"}
 weather_cache = {"at": 0.0, "data": None}
+weather_location_cache = {}
 
 
-async def get_weather():
-    if weather_cache["data"] and time.time() - weather_cache["at"] < WEATHER_EVERY:
-        return weather_cache["data"]
+async def _fetch_weather(location, timezone_name):
     import aiohttp
-    url = ("https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
-           "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,weather_code"
-           "&timezone={tz}&forecast_days=5").format(tz=config.WEATHER["timezone"].replace("/", "%2F"), **WEATHER_AT)
+    params = urllib.parse.urlencode({
+        "latitude": location["lat"], "longitude": location["lon"],
+        "current": "temperature_2m,weather_code,is_day",
+        "daily": "temperature_2m_max,temperature_2m_min,weather_code",
+        "timezone": timezone_name or "auto", "forecast_days": 5,
+    })
+    url = "https://api.open-meteo.com/v1/forecast?" + params
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8)) as s:
-            async with s.get(url) as r:
-                j = await r.json()
-        cur, day = j["current"], j.get("daily", {})
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8)) as session:
+            async with session.get(url) as response:
+                if response.status < 200 or response.status >= 300:
+                    raise RuntimeError("Open-Meteo returned HTTP " + str(response.status))
+                payload = await response.json()
+        cur, day = payload["current"], payload.get("daily", {})
         code = int(cur.get("weather_code", -1))
         highs, lows, codes = day.get("temperature_2m_max", []), day.get("temperature_2m_min", []), day.get("weather_code", [])
         forecast = []
@@ -2275,21 +2280,62 @@ async def get_weather():
                 "low": round(lows[i]) if i < len(lows) and lows[i] is not None else None,
                 "code": daily_code,
             })
-        weather_cache["data"] = {
-            "place": WEATHER_AT["place"], "temp": round(cur["temperature_2m"]),
+        return {
+            "place": location["place"], "temp": round(cur["temperature_2m"]),
             "code": code, "text": WMO.get(code, ""), "is_day": bool(cur.get("is_day")),
             "high": round(day["temperature_2m_max"][0]) if day.get("temperature_2m_max") else None,
             "low": round(day["temperature_2m_min"][0]) if day.get("temperature_2m_min") else None,
             "forecast": forecast,
         }
-        weather_cache["at"] = time.time()
-    except Exception as e:  # keep the last good reading; the home shows the date alone without one
-        log.warning("weather: %s", e)
+    except Exception as exc:
+        log.warning("weather (%s): %s", location.get("place", "custom location"), exc)
+        return None
+
+
+async def get_weather():
+    if weather_cache["data"] and time.time() - weather_cache["at"] < WEATHER_EVERY:
+        return weather_cache["data"]
+    location = dict(WEATHER_AT)
+    payload = await _fetch_weather(location, config.WEATHER["timezone"])
+    if payload:
+        weather_cache.update({"at": time.time(), "data": payload})
     return weather_cache["data"]
 
 
+async def get_weather_for(lat, lon, place, timezone_name):
+    location = {"lat": lat, "lon": lon, "place": place}
+    key = (round(lat, 4), round(lon, 4), timezone_name or "auto")
+    saved = weather_location_cache.get(key)
+    if saved and time.time() - saved["at"] < WEATHER_EVERY:
+        cached = dict(saved["data"])
+        cached["place"] = place
+        return cached
+    payload = await _fetch_weather(location, timezone_name)
+    if payload:
+        weather_location_cache[key] = {"at": time.time(), "data": payload}
+        if len(weather_location_cache) > 64:
+            oldest = min(weather_location_cache, key=lambda item: weather_location_cache[item]["at"])
+            weather_location_cache.pop(oldest, None)
+        return payload
+    return dict(saved["data"], place=place) if saved else None
+
+
 async def h_weather(request):
-    w = await get_weather()
+    lat, lon = request.query.get("lat"), request.query.get("lon")
+    if lat is None and lon is None:
+        w = await get_weather()
+    else:
+        try:
+            lat, lon = float(lat), float(lon)
+        except (TypeError, ValueError):
+            raise ApiError(400, "latitude and longitude must be numbers")
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            raise ApiError(400, "weather location is outside the valid range")
+        timezone_name = request.query.get("timezone", "auto")[:100]
+        if not re.fullmatch(r"[A-Za-z0-9_+./-]+", timezone_name):
+            timezone_name = "auto"
+        place = " ".join(request.query.get("place", "")[:80].split()) or "Weather"
+        w = await get_weather_for(lat, lon, place, timezone_name)
     if not w:
         raise ApiError(503, "No weather right now.", key="err_no_weather")
     return ok(**w)

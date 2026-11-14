@@ -624,6 +624,11 @@ first in More apps) are never in the list.
 With no bridge the TV keeps the order itself and sends it with this `POST` the next time the
 bridge answers.
 
+### `GET /api/weather`
+Returns the current temperature, condition code, and five-day forecast using the location in `config.json`.
+The TV may pass its selected place as `?lat=<latitude>&lon=<longitude>&place=<name>&timezone=<IANA zone>`;
+coordinates are range-checked and the response is cached per place for 30 minutes.
+
 ### Home settings: `GET /api/settings` and `POST /api/settings`
 The settings made on the TV with its gear tile (Home settings), per TV (add `?tv=` or `"tv"`). The
 TV home keeps them itself and hands the bridge a copy, so the phone remote and the TV agree (the

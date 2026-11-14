@@ -1138,10 +1138,19 @@
     }
     WEATHER_STATE = "loading";
     renderDockWeather();
-    var direct = OFFLINE || !!(ST.place && isFinite(ST.place.lat));
-    // A configured bridge is helpful, but weather shouldn't disappear just because its computer is
-    // asleep. Try Open-Meteo directly as a fallback, then retain a recent successful reading offline.
-    var request = direct ? weatherDirect() : api("GET", "/api/weather").catch(function () { return weatherDirect(); });
+    var customPlace = ST.place && isFinite(Number(ST.place.lat)) && isFinite(Number(ST.place.lon)) ? ST.place : null;
+    var path = "/api/weather";
+    if (customPlace) path += "?lat=" + encodeURIComponent(customPlace.lat) + "&lon=" + encodeURIComponent(customPlace.lon) +
+      "&place=" + encodeURIComponent(customPlace.name || "") + "&timezone=" + encodeURIComponent(customPlace.timezone || "auto");
+    // Ask the bridge to fetch a chosen location server-side (the TV's WebView may block direct
+    // cross-origin requests). When no bridge is online, fall back to Open-Meteo from the TV.
+    var request = OFFLINE ? (TV && TV.weather ? weatherNative() : weatherDirect())
+      : api("GET", path).then(function (j) {
+        if (customPlace && customPlace.name && j.place && String(j.place).toLowerCase() !== String(customPlace.name).toLowerCase()) {
+          throw new Error("Bridge returned weather for a different place");
+        }
+        return j;
+      }).catch(function () { return weatherDirect(); });
     return request.then(function (j) {
       if (!validWeather(j)) throw new Error("Invalid weather response");
       data.weather = j;
@@ -1164,11 +1173,46 @@
   }
 
   // Open-Meteo (free, no key), the same call the bridge makes. The words come from i18n.js.
+  var nativeWeatherId = 0, nativeWeatherPending = {};
+  window.__tvWeatherDone = function (id, raw) {
+    var cb = nativeWeatherPending[id];
+    if (!cb) return;
+    delete nativeWeatherPending[id];
+    clearTimeout(cb.timer);
+    try {
+      var result = JSON.parse(raw || "{}");
+      if (!validWeather(result)) throw new Error(result.error || "TV weather request returned no reading");
+      cb.resolve(result);
+    } catch (e) { cb.reject(e); }
+  };
+  function weatherNative() {
+    if (!TV || typeof TV.weather !== "function") return Promise.reject(new Error("Native weather is unavailable"));
+    return new Promise(function (resolve, reject) {
+      var id = "wx" + (++nativeWeatherId);
+      var timer = setTimeout(function () {
+        delete nativeWeatherPending[id];
+        reject(new Error("TV weather request timed out"));
+      }, 10000);
+      nativeWeatherPending[id] = { resolve: resolve, reject: reject, timer: timer };
+      try {
+        if (!TV.weather(String(WXCFG.lat), String(WXCFG.lon), String(WXCFG.timezone || "auto"), id)) {
+          clearTimeout(timer);
+          delete nativeWeatherPending[id];
+          reject(new Error("TV refused the weather request"));
+        }
+      } catch (e) {
+        clearTimeout(timer);
+        delete nativeWeatherPending[id];
+        reject(e);
+      }
+    });
+  }
   var WMO_KEY = { 0: "wx_clear", 1: "wx_mostly_clear", 2: "wx_partly", 3: "wx_cloudy", 45: "wx_fog", 48: "wx_fog",
     51: "wx_drizzle", 53: "wx_drizzle", 55: "wx_drizzle", 56: "wx_drizzle", 57: "wx_drizzle", 61: "wx_light_rain",
     63: "wx_rain", 65: "wx_heavy_rain", 66: "wx_rain", 67: "wx_rain", 80: "wx_showers", 81: "wx_showers",
     82: "wx_heavy_showers", 95: "wx_storms", 96: "wx_storms", 99: "wx_storms" };
   function weatherDirect() {
+    if (typeof fetch !== "function") return TV && TV.weather ? weatherNative() : Promise.reject(new Error("This TV cannot fetch weather directly"));
     var url = "https://api.open-meteo.com/v1/forecast?latitude=" + WXCFG.lat + "&longitude=" + WXCFG.lon +
       "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=" +
       encodeURIComponent(WXCFG.timezone || "auto") + "&forecast_days=5";
@@ -1186,6 +1230,9 @@
           low: lows[i] == null ? null : Math.round(lows[i]), code: codes[i] == null ? -1 : Math.round(codes[i]) });
       }
       return { temp: Math.round(c.temperature_2m), code: code, text: "", is_day: !!c.is_day, forecast: forecast };
+    }).catch(function (err) {
+      if (TV && TV.weather) return weatherNative();
+      throw err;
     });
   }
 
@@ -1848,7 +1895,11 @@
     var ov = $("idle-ambient-overlay");
     idleAmbientActive = !!on;
     document.documentElement.classList.toggle("idle-ambient-active", idleAmbientActive);
+    placeAppFocusFrame(idleAmbientActive ? null : paintedFocusEl);
     if (idleAmbientActive) {
+      // Ambient is a clean screen; discard the launcher selection rather than leaving a stale
+      // highlighted app to flash back when the overlay is dismissed.
+      clearFocus();
       clock();
       updateOledShift();
       if (ov) {
@@ -2889,21 +2940,29 @@
   }
 
   // ---------------- focus ----------------
-  var paintedFocusEl = null;
+  var paintedFocusEl = null, appFrameRequest = 0;
   function placeAppFocusFrame(el) {
     var frame = $("app-focus-frame");
     if (!frame) return;
+    var request = ++appFrameRequest;
     if (!NIGHT || !el || !el.classList || !el.classList.contains("app")) {
       frame.classList.remove("on");
       return;
     }
     var face = el.querySelector(".face");
     if (!face) { frame.classList.remove("on"); return; }
-    var box = face.getBoundingClientRect();
-    frame.style.width = box.width + "px";
-    frame.style.height = box.height + "px";
-    frame.style.transform = "translate3d(" + box.left + "px," + box.top + "px,0)";
-    frame.classList.add("on");
+    // Coalesce repeated remote key events into one layout read per rendered frame. The outline
+    // itself only animates its compositor-friendly transform between the latest focus targets.
+    var raf = window.requestAnimationFrame || function (cb) { return setTimeout(cb, 16); };
+    raf(function () {
+      if (request !== appFrameRequest || paintedFocusEl !== el) return;
+      var box = face.getBoundingClientRect();
+      var width = Math.round(box.width), height = Math.round(box.height);
+      if (frame.style.width !== width + "px") frame.style.width = width + "px";
+      if (frame.style.height !== height + "px") frame.style.height = height + "px";
+      frame.style.transform = "translate3d(" + Math.round(box.left) + "px," + Math.round(box.top) + "px,0)";
+      frame.classList.add("on");
+    });
   }
   function clearPaintedFocus() {
     if (paintedFocusEl) paintedFocusEl.classList.remove("focus");

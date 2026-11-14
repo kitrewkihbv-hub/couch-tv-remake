@@ -429,7 +429,7 @@ html.still .tile.focus .face, html.still .tile.focus .face::after { animation: n
 .theme-night .app:not(.focus) .face img { filter: none; }
 /* One shared outline glides between apps; the focused tile lifts with a short transform-only
    transition. Avoid animated blur/shadows so the effect stays smooth on low-end TV GPUs. */
-.theme-night .app.tile { transition: transform 170ms cubic-bezier(.2,.75,.25,1); }
+.theme-night .app.tile { transition: transform 220ms cubic-bezier(.18,.72,.22,1); }
 .theme-night .app.focus { transform: translate3d(0,-0.375rem,0) scale(1.045); z-index: 3; }
 .theme-night .app.focus .face { box-shadow: none; }
 .theme-night .app.focus { will-change: transform; }
@@ -440,7 +440,7 @@ html.still .tile.focus .face, html.still .tile.focus .face::after { animation: n
 .app-focus-frame {
   position: fixed; z-index: 8; left: 0; top: 0; width: 7rem; height: 7rem; box-sizing: border-box;
   border: 0.22rem solid #fff; border-radius: 26%; opacity: 0; pointer-events: none;
-  transform: translate3d(-200px,-200px,0); transition: transform 170ms cubic-bezier(.2,.75,.25,1), opacity 90ms ease-out;
+  transform: translate3d(-200px,-200px,0); transition: transform 280ms cubic-bezier(.18,.72,.22,1), opacity 90ms ease-out;
   will-change: transform; contain: strict;
 }
 .app-focus-frame.on { opacity: 1; }
@@ -2040,4 +2040,23 @@ html:not(.kids-on) .kids { display: none; }
   text-align: right;
 }
 
+/* The single animated focus frame replaces every older theme/glass focus outline. */
+html.theme-night .app.focus,
+html.glass.theme-night .app.focus,
+html.lighter.theme-night .app.focus {
+  transform: translate3d(0,-0.375rem,0) scale(1.045) !important;
+  transition: transform 220ms cubic-bezier(.18,.72,.22,1) !important;
+}
+html.theme-night .app.focus .face,
+html.glass.theme-night .app.focus .face,
+html.lighter.theme-night .app.focus .face {
+  box-shadow: none !important;
+}
+html.idle-ambient-active .home,
+html.idle-ambient-active #apps-section,
+html.idle-ambient-active #grid,
+html.idle-ambient-active .app-focus-frame {
+  display: none !important;
+  opacity: 0 !important;
+}
 

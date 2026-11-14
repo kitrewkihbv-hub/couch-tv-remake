@@ -82,7 +82,7 @@ assert(html.indexOf('id="dock-weather"') < html.indexOf('id="grid"'), "dock weat
 assert(!/\.theme-night \.dock-weather\.on \{[^}]*position: fixed/.test(css), "dock weather no longer floats over the center of the screen");
 assert(html.includes('id="idle-forecast"'), "the ambient screen has a dedicated forecast region");
 assert(/\/api\/weather[\s\S]*?temp: 15, code: 2[\s\S]*?forecast: forecast/.test(mock), "the mock preview returns deterministic current and forecast weather without a network call");
-assert(/forecast_days=5/.test(js) && /forecast_days=5/.test(bridge), "both bridge and offline weather requests load five forecast days");
+assert(/forecast_days=5/.test(js) && /"forecast_days": 5/.test(bridge), "both bridge and offline weather requests load five forecast days");
 assert(/"forecast": forecast/.test(bridge), "the bridge weather response includes daily forecast data");
 assert(/function ambientItem\(\)[\s\S]*?kind: "ambient"/.test(js), "the dock replaces More apps with an Ambient tile");
 assert(/list\.push\(ambientItem\(\)\)/.test(js) && /a\.kind === "ambient"/.test(js),
@@ -90,8 +90,16 @@ assert(/list\.push\(ambientItem\(\)\)/.test(js) && /a\.kind === "ambient"/.test(
 assert(!/list\.push\(moreItem\(\)\)/.test(js) && !/kind: "more"/.test(js), "the slow All apps entry is not generated anymore");
 assert(/GRID_COLS = expanded \? 6 : Math\.max\(1, Math\.min\(12, gridItems\.length, fitCols \|\| 1\)\)/.test(js),
   "the dock wraps to the available TV width instead of clipping a long app row");
-assert(/api\("GET", "\/api\/weather"\)\.catch\(function \(\) \{ return weatherDirect\(\); \}\)/.test(js) && /WEATHER_CACHE_MAX_AGE/.test(js),
-  "weather falls back to a direct request and a recent cached reading when the bridge is unavailable");
+assert(/api\("GET", path\)[\s\S]*?weatherDirect\(\)/.test(js) && /WEATHER_CACHE_MAX_AGE/.test(js),
+  "weather uses the bridge fallback and retains a recent cached reading");
+assert(/async def get_weather_for\(lat, lon, place, timezone_name\)/.test(bridge) && /request\.query\.get\("lat"\)/.test(bridge),
+  "the bridge fetches weather for the location selected on the TV");
+assert(/function weatherNative\(\)/.test(js) && /TV\.weather\(String\(WXCFG\.lat\)/.test(js) && /window\.__tvWeatherDone/.test(js),
+  "offline Android TVs can retrieve weather through the native network stack when WebView fetch fails");
+assert(/requestAnimationFrame/.test(sourceOf("placeAppFocusFrame")) && /clearFocus\(\)/.test(sourceOf("setIdleAmbient")) && /idle-ambient-active #apps-section[\s\S]*?display: none !important/.test(css),
+  "focus-frame work is coalesced and the dock selection is cleared in ambient mode");
+assert(/html\.glass\.theme-night \.app\.focus \.face[\s\S]*?box-shadow: none !important/.test(css),
+  "legacy glass focus styles cannot draw a second box around the active app");
 assert.strictEqual(config.weather.place, "Seattle", "the packaged default weather location matches the target device");
 assert.strictEqual(config.home.wx_unit, "f", "the packaged home uses Fahrenheit");
 assert.strictEqual(config.home.smart_idle.enabled, true, "the scenic ambient screen activates when the home has been idle");
