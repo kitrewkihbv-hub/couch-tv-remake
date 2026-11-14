@@ -137,6 +137,9 @@ def clean_people(items):
         item = {"id": pid, "name": name}
         if isinstance(p.get("colour"), str) and re.fullmatch(r"#[0-9a-fA-F]{3,8}", p["colour"]):
             item["colour"] = p["colour"]
+        avatar = p.get("avatar")
+        if isinstance(avatar, str) and len(avatar) <= 500 and re.fullmatch(r"https?://[^\s<>\"']+", avatar, re.I):
+            item["avatar"] = avatar
         # Kids and guests are left out of the household's taste (what "everyone" picks are based on).
         for flag in ("kid", "guest"):
             if p.get(flag) is True:

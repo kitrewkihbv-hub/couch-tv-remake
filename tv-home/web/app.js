@@ -105,7 +105,7 @@
   }
   // Home settings made on this TV with the gear tile (see "home settings" below). They win over
   // config.js. ST is the saved object; the rest are read from it in readConfig().
-  var ST = {}, WX_SHOW = true, WX_F = false, WX_EVERY = 30, HIDDEN_TV = [];
+  var ST = {}, WX_SHOW = true, WX_F = false, WX_EVERY = 30, HIDDEN_TV = [], WEATHER_STATE = "loading";
   var IDLE_PHOTO_STEPS = [0, 5, 10, 15, 30, 60];
   var IDLE_PHOTO_SECONDS = 0, idlePhotoTimer = null, idlePhotoActive = false;
   var WX_AMBIENT = true, WX_SUN_GRADE = true;
@@ -375,6 +375,8 @@
     if (CFG.weather) WXCFG = CFG.weather;
     var pl = ST.place;
     if (pl && isFinite(pl.lat) && isFinite(pl.lon)) WXCFG = { lat: pl.lat, lon: pl.lon, place: pl.name || "", timezone: pl.timezone || "auto" };
+    var wxSaved = cachedWeather();
+    if (wxSaved) { data.weather = wxSaved; WEATHER_STATE = "cached"; }
     WX_SHOW = ST.wx_show !== false;
     WX_F = (ST.wx_unit || HOME.wx_unit) === "f";   // Home settings, else home.wx_unit in config.json
     WX_EVERY = [15, 30, 60].indexOf(ST.wx_every) >= 0 ? ST.wx_every : 30;
@@ -632,9 +634,17 @@
     var el = $("dock-weather");
     if (!el) return;
     var w = WX_SHOW && data.weather && data.weather.temp != null ? data.weather : null;
-    if (!w || expanded) {
+    if (!WX_SHOW || expanded) {
       el.classList.remove("on");
       el.innerHTML = "";
+      return;
+    }
+    if (!w) {
+      var wxMessage = WEATHER_STATE === "loading" ? t("weather_loading") : t("weather_unavailable");
+      el.innerHTML = '<span class="dock-wx-icon" aria-hidden="true">' + wxIcon({ code: 3, is_day: true }) + '</span><span class="dock-wx-copy">' +
+        esc(wxMessage) + '</span>';
+      el.setAttribute("aria-label", wxMessage);
+      el.classList.add("on");
       return;
     }
     var place = WXCFG.place || "";
@@ -687,7 +697,8 @@
     if (idate) idate.textContent = day;
     if (iwx) {
       var wIdle = WX_SHOW && data.weather && data.weather.temp != null ? data.weather : null;
-      iwx.textContent = wIdle ? (tempText(wIdle.temp) + " · " + wxText(wIdle) + (WXCFG.place ? " · " + WXCFG.place : "")) : "";
+      iwx.textContent = wIdle ? (tempText(wIdle.temp) + " · " + wxText(wIdle) + (WXCFG.place ? " · " + WXCFG.place : ""))
+        : WX_SHOW ? t(WEATHER_STATE === "loading" ? "weather_loading" : "weather_unavailable") : "";
       renderIdleForecast(wIdle);
     }
     var iov = $("idle-ambient-overlay");
@@ -1120,10 +1131,13 @@
   function refreshWeather() {
     if (!WX_SHOW) {
       data.weather = null;
+      WEATHER_STATE = "off";
       clock();
       updateAmbientWeather();
       return Promise.resolve();
     }
+    WEATHER_STATE = "loading";
+    renderDockWeather();
     var direct = OFFLINE || !!(ST.place && isFinite(ST.place.lat));
     // A configured bridge is helpful, but weather shouldn't disappear just because its computer is
     // asleep. Try Open-Meteo directly as a fallback, then retain a recent successful reading offline.
@@ -1131,13 +1145,19 @@
     return request.then(function (j) {
       if (!validWeather(j)) throw new Error("Invalid weather response");
       data.weather = j;
+      WEATHER_STATE = "ready";
       keep(WEATHER_CACHE_KEY, { at: Date.now(), lat: Number(WXCFG.lat), lon: Number(WXCFG.lon), weather: j });
       clock();
       updateAmbientWeather();
-    }).catch(function () {
+    }).catch(function (err) {
       var previous = cachedWeather();
-      if (!previous) return;
-      data.weather = previous;
+      if (previous) {
+        data.weather = previous;
+        WEATHER_STATE = "cached";
+      } else {
+        WEATHER_STATE = "unavailable";
+        try { console.warn("[home weather]", err && err.message || err); } catch (e) {}
+      }
       clock();
       updateAmbientWeather();
     });
@@ -2024,7 +2044,10 @@
     return PALETTE[h % PALETTE.length];
   }
   function avatarHTML(p) {
-    return '<span class="avatar" style="background:' + esc(colourOf(p)) + '">' + esc((p.name || "?").trim().charAt(0).toUpperCase()) + "</span>";
+    var avatar = typeof p.avatar === "string" && /^https?:\/\/[^\s<>"']{1,500}$/i.test(p.avatar) ? p.avatar : "";
+    var portrait = '<svg class="avatar-art" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="36" r="19"/><path d="M10 100c2-26 17-40 40-40s38 14 40 40z"/></svg>';
+    var photo = avatar ? '<img class="avatar-photo" src="' + esc(avatar) + '" alt="" referrerpolicy="no-referrer" decoding="async" onerror="this.remove()">' : "";
+    return '<span class="avatar' + (avatar ? " has-photo" : "") + '" style="background:' + esc(colourOf(p)) + '">' + portrait + photo + "</span>";
   }
   function whoIndex() { return Math.max(0, PEOPLE.map(function (p) { return p.id; }).indexOf(who)); }
 
@@ -2867,17 +2890,36 @@
 
   // ---------------- focus ----------------
   var paintedFocusEl = null;
+  function placeAppFocusFrame(el) {
+    var frame = $("app-focus-frame");
+    if (!frame) return;
+    if (!NIGHT || !el || !el.classList || !el.classList.contains("app")) {
+      frame.classList.remove("on");
+      return;
+    }
+    var face = el.querySelector(".face");
+    if (!face) { frame.classList.remove("on"); return; }
+    var box = face.getBoundingClientRect();
+    frame.style.width = box.width + "px";
+    frame.style.height = box.height + "px";
+    frame.style.transform = "translate3d(" + box.left + "px," + box.top + "px,0)";
+    frame.classList.add("on");
+  }
   function clearPaintedFocus() {
     if (paintedFocusEl) paintedFocusEl.classList.remove("focus");
     paintedFocusEl = null;
+    placeAppFocusFrame(null);
   }
   function paintTileFocus(el) {
     if (paintedFocusEl && paintedFocusEl !== el) paintedFocusEl.classList.remove("focus");
     paintedFocusEl = el || null;
     if (el) el.classList.add("focus");
+    placeAppFocusFrame(el);
   }
+  window.addEventListener("resize", function () { placeAppFocusFrame(paintedFocusEl); });
   function clearFocus() {
     paintedFocusEl = null;
+    placeAppFocusFrame(null);
     shelfEls.concat(gridEls, quickEls).forEach(function (el) { if (el) el.classList.remove("focus"); });
     $("people").classList.remove("focus");
     Array.prototype.forEach.call($("people").children, function (el) { el.classList.remove("focus"); });

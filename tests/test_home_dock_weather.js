@@ -36,12 +36,13 @@ const forecastNode = mockElement();
 const lookup = id => id === "dock-weather" ? node : id === "idle-forecast" ? forecastNode : null;
 let weather = { temp: 21, code: 2, is_day: true };
 let expanded = false;
-const renderDockWeather = new Function("$", "NIGHT", "WX_SHOW", "data", "expanded", "WXCFG", "wxText", "wxIcon", "esc", "tempText",
+let weatherState = "ready";
+const renderDockWeather = new Function("$", "WX_SHOW", "data", "expanded", "WXCFG", "wxText", "wxIcon", "esc", "tempText", "WEATHER_STATE", "t",
   sourceOf("renderDockWeather") + "; return renderDockWeather;")(
-    lookup, true, true, { get weather() { return weather; } }, false,
+    lookup, true, { get weather() { return weather; } }, false,
     { place: "Seattle <home>" }, w => w.code === 2 ? "Partly cloudy" : "Rain", () => "<svg></svg>",
     value => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"),
-    value => value + "°");
+    value => value + "°", weatherState, key => ({ weather_loading: "Weather loading…", weather_unavailable: "Weather unavailable" }[key] || key));
 
 renderDockWeather();
 assert(node.classList.contains("on"), "the weather pill is visible when weather is available");
@@ -51,13 +52,15 @@ assert(node.innerHTML.includes("Seattle &lt;home&gt;"), "the place name is escap
 assert.strictEqual(node.attributes["aria-label"], "21°, Partly cloudy, Seattle <home>", "the pill has an accessible spoken label");
 
 weather = null;
+weatherState = "unavailable";
 renderDockWeather();
-assert(!node.classList.contains("on"), "the pill disappears when weather is unavailable");
+assert(node.classList.contains("on"), "the home shows a visible diagnostic pill instead of silently hiding failed weather");
+assert(node.innerHTML.includes("Weather unavailable"), "the weather pill explains how to troubleshoot a missing reading");
 weather = { temp: 21, code: 2, is_day: true };
 expanded = true;
-const renderExpanded = new Function("$", "NIGHT", "WX_SHOW", "data", "expanded", "WXCFG", "wxText", "wxIcon", "esc", "tempText",
+const renderExpanded = new Function("$", "WX_SHOW", "data", "expanded", "WXCFG", "wxText", "wxIcon", "esc", "tempText", "WEATHER_STATE", "t",
   sourceOf("renderDockWeather") + "; return renderDockWeather;")(
-    lookup, true, true, { weather }, expanded, { place: "Seattle" }, () => "Clear", () => "<svg></svg>", String, value => value + "°");
+    lookup, true, { weather }, expanded, { place: "Seattle" }, () => "Clear", () => "<svg></svg>", String, value => value + "°", "ready", key => key);
 renderExpanded();
 assert(!node.classList.contains("on"), "the weather pill is hidden while the expanded app library is open");
 
@@ -74,6 +77,7 @@ renderIdleForecast(null);
 assert(!forecastNode.classList.contains("on"), "the ambient forecast box hides cleanly if weather is disabled or absent");
 
 assert(html.includes('id="dock-weather"'), "the dock weather region exists in the home page");
+assert(html.includes('id="app-focus-frame"'), "the app rail includes a shared focus frame for smooth D-pad movement");
 assert(html.indexOf('id="dock-weather"') < html.indexOf('id="grid"'), "dock weather is laid out immediately above the app row");
 assert(!/\.theme-night \.dock-weather\.on \{[^}]*position: fixed/.test(css), "dock weather no longer floats over the center of the screen");
 assert(html.includes('id="idle-forecast"'), "the ambient screen has a dedicated forecast region");
@@ -94,8 +98,15 @@ assert.strictEqual(config.home.smart_idle.enabled, true, "the scenic ambient scr
 assert(/ctx_hide/.test(js) && /app_hidden/.test(js), "apps remain hideable and recoverable in Home settings");
 assert(/\.theme-night \.app\.tile\.focus \.face, \.theme-night \.app\.tile\.focus \.face::after \{ animation: none; \}/.test(css),
   "focused app tiles do not run the expensive perpetual sway/glint animations");
-assert(/\.theme-night \.app\.focus \{ transform: none; \}/.test(css) && /\.theme-night \.app\.tile, \.theme-night \.app \.face, \.theme-night \.app \.label \{ transition: none !important; \}/.test(css),
-  "app focus is a static outline without GPU-heavy scaling or transition work");
+assert(/\.theme-night \.app\.focus \{ transform: translate3d\(0,-0\.375rem,0\) scale\(1\.045\); z-index: 3; \}/.test(css) && /\.app-focus-frame\.on \{ opacity: 1; \}/.test(css),
+  "app focus smoothly lifts the tile while a shared focus frame glides between positions");
+assert(/function placeAppFocusFrame\([\s\S]*?getBoundingClientRect\(\)/.test(js), "the focus frame tracks only the focused app tile");
+assert(/avatar-art/.test(sourceOf("avatarHTML")) && /avatar-photo/.test(sourceOf("avatarHTML")),
+  "people receive a portrait fallback and optional real profile image");
+const makeAvatarHTML = new Function("esc", "colourOf", sourceOf("avatarHTML") + "; return avatarHTML;")(String, p => p.colour);
+const avatarHTML = makeAvatarHTML({ name: "Pat", avatar: "https://images.example.org/pat.jpg", colour: "#ff375f" });
+assert(avatarHTML.includes("https://images.example.org/pat.jpg") && avatarHTML.includes("avatar-art"),
+  "profile pictures render when a public avatar URL is set and retain a fallback");
 assert(/function refreshWeather\(\)[\s\S]*?if \(!WX_SHOW\)/.test(js), "weather refresh is not restricted to the Night theme");
 assert(/var w = WX_SHOW && data\.weather/.test(sourceOf("renderDockWeather")), "the weather pill renders whenever a reading is available, in any theme");
 assert(/font-size: 17rem/.test(css) && /rgba\(5, 8, 14, 0\.12\)/.test(css), "idle ambient clock is large over the scenic background");

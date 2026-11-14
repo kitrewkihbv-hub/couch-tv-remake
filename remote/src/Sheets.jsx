@@ -336,6 +336,19 @@ export function PeopleSheet({ open, onClose, onSaved }) {
     if (!clean || !was || clean === was.name) { setRows(rows.slice()); return; }
     save(rows.map((p) => (p.id === id ? { ...p, name: clean } : p)));
   };
+  const editAvatar = (person) => {
+    const value = window.prompt(t('person_avatar_prompt'), person.avatar || '');
+    if (value === null) return;
+    const avatar = value.trim();
+    if (avatar && !/^https?:\/\/[^\s<>"']{1,500}$/i.test(avatar)) { setMsg(t('person_avatar_invalid')); return; }
+    const next = rows.map((p) => {
+      if (p.id !== person.id) return p;
+      const copy = { ...p };
+      if (avatar) copy.avatar = avatar; else delete copy.avatar;
+      return copy;
+    });
+    save(next, t('saved_home'));
+  };
   const remove = (p) => { tick(); save(rows.filter((x) => x.id !== p.id), t('removed', { name: p.name })); };
   const add = (e) => {
     e.preventDefault();
@@ -365,7 +378,10 @@ export function PeopleSheet({ open, onClose, onSaved }) {
       <ol className="arrange" ref={list} onPointerMove={move} onPointerUp={end} onPointerCancel={end}>
         {(rows || []).map((p) => (
           <li key={p.id} className={`arrange-row glass ${drag === p.id ? 'lifted' : ''}`}>
-            <span className="person-dot" style={{ background: personColour(p) }}>{p.name.slice(0, 1).toUpperCase()}</span>
+            <button type="button" className="person-dot person-avatar-edit" style={{ background: personColour(p) }}
+              aria-label={t('person_avatar_label', { name: p.name })} title={t('person_avatar_label', { name: p.name })} onClick={() => editAvatar(p)}>
+              {p.avatar ? <img src={p.avatar} alt="" referrerPolicy="no-referrer" /> : p.name.slice(0, 1).toUpperCase()}
+            </button>
             <input className="person-name" defaultValue={p.name} key={p.name} maxLength={40} aria-label={`Name for ${p.name}`}
               enterKeyHint="done" onBlur={(e) => rename(p.id, e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} />

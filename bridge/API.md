@@ -180,9 +180,10 @@ is fine (then nobody is picked and everything shows). Seeded from `people` in `c
 anything is changed the list lives in `data/people.json` and wins from then on.
 ```json
 {"ok": true, "people": [{"id": "person1", "name": "Person 1"},
-                        {"id": "guest", "name": "Guest", "colour": "#30b350"}]}
+                        {"id": "guest", "name": "Guest", "colour": "#30b350",
+                         "avatar": "https://images.example.org/guest.jpg"}]}
 ```
-`POST` takes one of two bodies and answers with the new list, as above:
+`avatar` is an optional public HTTP(S) image URL (up to 500 characters), editable from the phone remote's People sheet. `POST` takes one of two bodies and answers with the new list, as above:
 - `{"order": ["guest", "person1"]}`: reorder only (what the TV remote sends). Ids left out keep
   their place at the end; unknown ids are ignored.
 - `{"people": [{"id": "person1", "name": "Person 1"}, {"name": "Guest"}]}`: the whole list

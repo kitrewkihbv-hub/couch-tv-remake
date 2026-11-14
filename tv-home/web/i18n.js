@@ -148,6 +148,8 @@
     wx_showers: "Showers",
     wx_heavy_showers: "Heavy showers",
     wx_storms: "Storms",
+    weather_loading: "Weather loading…",
+    weather_unavailable: "Weather unavailable — check Location & Weather settings and internet",
 
     // ---- the gear tile ----
     gear_home: "Home settings",
@@ -4361,6 +4363,8 @@
     wx_showers: "Przelotne opady",
     wx_heavy_showers: "Silne przelotne opady",
     wx_storms: "Burze",
+    weather_loading: "Pobieranie pogody…",
+    weather_unavailable: "Pogoda niedostępna — sprawdź lokalizację i internet",
 
     // ---- the gear tile ----
     gear_home: "Ustawienia ekranu głównego",

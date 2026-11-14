@@ -83,6 +83,14 @@ class KidsConfigTests(KidsBase, unittest.TestCase):
         # app ids become packages; the TV's Settings is never an allowed app
         self.assertEqual(m["apps"], ["au.net.abc.iview", "com.google.android.youtube.tv"])
 
+    def test_profile_avatar_url_is_kept_only_when_safe(self):
+        rows = config.clean_people([
+            {"id": "photo", "name": "Photo", "avatar": "https://cdn.example.org/p.jpg"},
+            {"id": "bad", "name": "Bad", "avatar": "javascript:alert(1)"},
+        ])
+        self.assertEqual(rows[0]["avatar"], "https://cdn.example.org/p.jpg")
+        self.assertNotIn("avatar", rows[1])
+
     def test_grown_ups_are_unchanged(self):
         self.assertIsNone(kids.mode("mum"))
         pub = {p["id"]: p for p in config.public()["people"]}
