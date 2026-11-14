@@ -2257,19 +2257,30 @@ async def get_weather():
         return weather_cache["data"]
     import aiohttp
     url = ("https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
-           "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min"
-           "&timezone={tz}&forecast_days=1").format(tz=config.WEATHER["timezone"].replace("/", "%2F"), **WEATHER_AT)
+           "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,weather_code"
+           "&timezone={tz}&forecast_days=5").format(tz=config.WEATHER["timezone"].replace("/", "%2F"), **WEATHER_AT)
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8)) as s:
             async with s.get(url) as r:
                 j = await r.json()
         cur, day = j["current"], j.get("daily", {})
         code = int(cur.get("weather_code", -1))
+        highs, lows, codes = day.get("temperature_2m_max", []), day.get("temperature_2m_min", []), day.get("weather_code", [])
+        forecast = []
+        for i, date in enumerate(day.get("time", [])[:5]):
+            daily_code = int(codes[i]) if i < len(codes) and codes[i] is not None else -1
+            forecast.append({
+                "date": date,
+                "high": round(highs[i]) if i < len(highs) and highs[i] is not None else None,
+                "low": round(lows[i]) if i < len(lows) and lows[i] is not None else None,
+                "code": daily_code,
+            })
         weather_cache["data"] = {
             "place": WEATHER_AT["place"], "temp": round(cur["temperature_2m"]),
             "code": code, "text": WMO.get(code, ""), "is_day": bool(cur.get("is_day")),
             "high": round(day["temperature_2m_max"][0]) if day.get("temperature_2m_max") else None,
             "low": round(day["temperature_2m_min"][0]) if day.get("temperature_2m_min") else None,
+            "forecast": forecast,
         }
         weather_cache["at"] = time.time()
     except Exception as e:  # keep the last good reading; the home shows the date alone without one

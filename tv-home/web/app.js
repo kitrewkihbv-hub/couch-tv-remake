@@ -625,6 +625,49 @@
   // Open-Meteo gives Celsius; Fahrenheit is worked out here when Home settings asks for it.
   function tempText(c) { return WX_F ? Math.round(c * 9 / 5 + 32) + "°F" : c + "°"; }
   function wxText(w) { var k = WMO_KEY[w.code]; return k ? t(k) : (w.text || ""); }
+  // A small, always-at-a-glance weather pill above the app dock (not just tucked into the clock).
+  // Reuses the home weather reading, so it adds no network request or work to remote navigation.
+  function renderDockWeather() {
+    var el = $("dock-weather");
+    if (!el) return;
+    var w = NIGHT && WX_SHOW && data.weather && data.weather.temp != null ? data.weather : null;
+    if (!w || expanded) {
+      el.classList.remove("on");
+      el.innerHTML = "";
+      return;
+    }
+    var place = WXCFG.place || "";
+    var condition = wxText(w);
+    el.innerHTML = '<span class="dock-wx-icon" aria-hidden="true">' + wxIcon(w) + '</span>' +
+      '<b class="dock-wx-temp">' + esc(tempText(w.temp)) + '</b>' +
+      '<span class="dock-wx-copy"><span class="dock-wx-condition">' + esc(condition) + '</span>' +
+      (place ? '<span class="dock-wx-place">' + esc(place) + '</span>' : "") + '</span>';
+    el.setAttribute("aria-label", [tempText(w.temp), condition, place].filter(function (x) { return !!x; }).join(", "));
+    el.classList.add("on");
+  }
+  function renderIdleForecast(weather) {
+    var el = $("idle-forecast");
+    if (!el) return;
+    var days = weather && WX_SHOW && Array.isArray(weather.forecast) ? weather.forecast.slice(0, 5) : [];
+    if (!days.length) {
+      el.classList.remove("on");
+      el.innerHTML = "";
+      return;
+    }
+    var locale = window.I18N ? window.I18N.locale() : "en-US";
+    el.innerHTML = days.map(function (day) {
+      var label = "";
+      if (day.date && /^\d{4}-\d{2}-\d{2}$/.test(day.date)) {
+        var p = day.date.split("-");
+        label = new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString(locale, { weekday: "short" });
+      }
+      return '<div class="idle-forecast-day" role="listitem"><span class="idle-forecast-name">' + esc(label) +
+        '</span><span class="idle-forecast-icon" aria-hidden="true">' + wxIcon({ code: Number(day.code) || 0, is_day: true }) +
+        '</span><b>' + (day.high == null ? "–" : esc(tempText(Number(day.high)))) +
+        '</b><small>' + (day.low == null ? "–" : esc(tempText(Number(day.low)))) + '</small></div>';
+    }).join("");
+    el.classList.add("on");
+  }
 
   function clock() {
     var d = new Date(), h = d.getHours(), m = d.getMinutes();
@@ -637,12 +680,14 @@
     var w = NIGHT && WX_SHOW && data.weather && data.weather.temp != null ? data.weather : null;
     $("date").innerHTML = '<span class="dline">' + esc(day) + (w ? '<span class="wx">' + wxIcon(w) + esc(tempText(w.temp)) +
       '<span class="ww"> ' + esc(wxText(w)) + "</span></span>" : "") + "</span>";
+    renderDockWeather();
     var ic = $("idle-clock"), idate = $("idle-date"), iwx = $("idle-wx");
     if (ic) ic.innerHTML = hm + (CLOCK24 ? "" : "<small>" + esc(h < 12 ? t("am") : t("pm")) + "</small>");
     if (idate) idate.textContent = day;
     if (iwx) {
       var wIdle = WX_SHOW && data.weather && data.weather.temp != null ? data.weather : null;
-      iwx.textContent = wIdle ? (tempText(wIdle.temp) + " · " + wxText(wIdle)) : "";
+      iwx.textContent = wIdle ? (tempText(wIdle.temp) + " · " + wxText(wIdle) + (WXCFG.place ? " · " + WXCFG.place : "")) : "";
+      renderIdleForecast(wIdle);
     }
     var iov = $("idle-ambient-overlay");
     if (iov) iov.classList.toggle("quiet-hours", isQuietHours(SMART_IDLE.quiet_hours));
@@ -1082,10 +1127,16 @@
     82: "wx_heavy_showers", 95: "wx_storms", 96: "wx_storms", 99: "wx_storms" };
   function weatherDirect() {
     var url = "https://api.open-meteo.com/v1/forecast?latitude=" + WXCFG.lat + "&longitude=" + WXCFG.lon +
-      "&current=temperature_2m,weather_code,is_day&timezone=" + encodeURIComponent(WXCFG.timezone || "auto") + "&forecast_days=1";
+      "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=" +
+      encodeURIComponent(WXCFG.timezone || "auto") + "&forecast_days=5";
     return fetch(url).then(function (r) { return r.json(); }).then(function (j) {
-      var c = j.current, code = Math.round(c.weather_code);
-      return { temp: Math.round(c.temperature_2m), code: code, text: "", is_day: !!c.is_day };
+      var c = j.current, d = j.daily || {}, code = Math.round(c.weather_code), forecast = [];
+      var dates = d.time || [], highs = d.temperature_2m_max || [], lows = d.temperature_2m_min || [], codes = d.weather_code || [];
+      for (var i = 0; i < Math.min(5, dates.length); i++) {
+        forecast.push({ date: dates[i], high: highs[i] == null ? null : Math.round(highs[i]),
+          low: lows[i] == null ? null : Math.round(lows[i]), code: codes[i] == null ? -1 : Math.round(codes[i]) });
+      }
+      return { temp: Math.round(c.temperature_2m), code: code, text: "", is_day: !!c.is_day, forecast: forecast };
     });
   }
 
@@ -1103,7 +1154,7 @@
   // media sessions (/api/music) every 5 s while the home is on screen; the buttons are the remote's
   // media keys. A paused song stays for ten minutes so play can start it again. No computer and no
   // on-TV app (option A): Android lets no ordinary app read other apps' sessions, so no card.
-  var music = null, npI = 1, npSrc = "";   // npSrc: where the song comes from, to reset npI when it changes
+  var music = null, npI = 1, npSrc = "", npControlsFocused = false;   // npSrc: where the song comes from, to reset npI when it changes
   var AMBIENT_MUSIC = false, ambientOpen = false, ambientDismissed = false, ambI = 1;
   var lastTrackKey = "", paletteCache = {}, curProgress = 0, curDuration = 0;
 
@@ -1303,6 +1354,7 @@
 
   function renderNp() {
     var el = $("np"), on = npVisible();
+    npControlsFocused = on && zone === "np";
     el.classList.toggle("on", on);
     if (NIGHT) {
       // the row shows while someone has a show on the go, or while a song plays
@@ -1716,7 +1768,7 @@
     sceneVideos(!screenOffActive);
     resetIdlePhoto();
   }
-  // Smart Idle & OLED-safe Ambient Clock
+  // Smart Idle & Scenic Ambient Clock
   var lastSmartActivityAt = Date.now();
   function resetSmartIdle() {
     lastSmartActivityAt = Date.now();
@@ -1746,6 +1798,7 @@
   function setIdleAmbient(on) {
     var ov = $("idle-ambient-overlay");
     idleAmbientActive = !!on;
+    document.documentElement.classList.toggle("idle-ambient-active", idleAmbientActive);
     if (idleAmbientActive) {
       clock();
       updateOledShift();
@@ -1759,9 +1812,11 @@
         }
         ov.classList.toggle("quiet-hours", isQuietHours(SMART_IDLE.quiet_hours));
         ov.classList.add("active");
+        ov.setAttribute("aria-hidden", "false");
       }
     } else if (ov) {
       ov.classList.remove("active");
+      ov.setAttribute("aria-hidden", "true");
     }
     sceneVideos(!idleAmbientActive);   // no clip decoding behind the ambient clock
   }
@@ -2232,6 +2287,29 @@
     return TUCKED.indexOf(a.package) >= 0 || TUCKED_NAMES.test(a.name || "");
   }
   function isNew(pkg) { return newApps.indexOf(pkg) >= 0; }
+  // These household apps are clearer as white glyphs on the Night glass dock rather than as
+  // opaque branded squares. Match by both title and known package fragments: launcher names can
+  // differ between SmartTube releases and file manager variants.
+  function glassGlyphType(it) {
+    if (!it) return "";
+    var key = ((it.name || "") + " " + (it.package || "")).toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (key.indexOf("streamflix") >= 0) return "streamflix";
+    if (key.indexOf("smarttube") >= 0 || key.indexOf("teamsmartvideomanager") >= 0 || key.indexOf("liskovsoftsmarttubetv") >= 0) return "smarttube";
+    if (key.indexOf("instagram") >= 0) return "instagram";
+    if (key.indexOf("filemanager") >= 0 || key.indexOf("filecommander") >= 0 || key.indexOf("files") >= 0 || key.indexOf("documentsui") >= 0) return "filemanager";
+    if (key.indexOf("downloader") >= 0 || key.indexOf("esabadownloader") >= 0) return "downloader";
+    if (key.indexOf("localsend") >= 0) return "localsend";
+    return "";
+  }
+  function glassFallback(kind) {
+    if (kind === "streamflix") return '<b class="glass-fallback-mark">S</b>';
+    if (kind === "smarttube") return '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="4"/><path d="m10 9 5 3-5 3z"/></svg>';
+    if (kind === "instagram") return '<svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.5 6.8h.01"/></svg>';
+    if (kind === "filemanager") return '<svg viewBox="0 0 24 24"><path d="M3 7.5h7l2 2h9v9H3z"/><path d="M3 9.5V6h7l2 2"/></svg>';
+    if (kind === "downloader") return '<svg viewBox="0 0 24 24"><path d="M12 3v11m-4-4 4 4 4-4M4 17v3h16v-3"/></svg>';
+    if (kind === "localsend") return '<svg viewBox="0 0 24 24"><path d="m3 11 18-7-7 17-3-7z"/><path d="m11 14 5-5"/></svg>';
+    return "";
+  }
   // The TV's apps less the ones hidden in Home settings (they come back from the Apps list there).
   function shownApps() { return data.apps.filter(function (a) { return HIDDEN_TV.indexOf(a.package) < 0; }); }
   // The gear tile: always there, whatever the TV calls its own settings app. OK opens a small menu,
@@ -2650,22 +2728,23 @@
   }
 
   function dockHTML(it) {
-    var face;
+    var face, clearKind = glassGlyphType(it);
     if (it.kind === "screen") face = '<div class="face tool">' + ICONS.screen + "</div>";
     else if (it.kind === "input") face = inputFace(it);
     else if (it.kind === "more") face = '<div class="face tool">' + ICONS.more + "</div>";
     else if (it.kind === "gear") face = '<div class="face tool">' + ICONS.gear + "</div>";
     else if (it.kind === "devmode") face = '<div class="face tool">' + ICONS.devmode + "</div>";
     else if (it.kind === "smart") face = '<div class="face tool">' + window.smartHome.icon + "</div>";
-    else if (iconUrl(it.package)) face = '<div class="face"><img src="' + esc(iconUrl(it.package)) + '" alt="" decoding="async" onerror="this.parentNode.className=\'face word\';this.parentNode.textContent=this.getAttribute(\'data-name\')" data-name="' + esc(it.name) + '"></div>';
+    else if (iconUrl(it.package)) face = '<div class="face"><img src="' + esc(iconUrl(it.package)) + '" alt="" decoding="async"' + (clearKind ? '' : ' onerror="this.parentNode.className=\'face word\';this.parentNode.textContent=this.getAttribute(\'data-name\')" data-name="' + esc(it.name)) + '></div>';
+    else if (clearKind) face = '<div class="face clear-fallback">' + glassFallback(clearKind) + '</div>';
     else face = '<div class="face word">' + esc(it.name) + "</div>";
-    var cls = "tile app dock-ic" + (it.kind === "input" ? " input-ic ic-" + esc(it.icon || "hdmi") : "") + (lift && it.package === lift.pkg ? " lifted" : "");
-    return '<div class="' + cls + '">' + face + dotHTML(it) + '<div class="label">' + esc(it.name) + "</div></div>";
+    var cls = "tile app dock-ic" + (clearKind ? " clear-always" : "") + (it.kind === "input" ? " input-ic ic-" + esc(it.icon || "hdmi") : "") + (lift && it.package === lift.pkg ? " lifted" : "");
+    return '<div class="' + cls + '"' + (clearKind ? ' data-glyph-kind="' + clearKind + '"' : "") + '>' + face + dotHTML(it) + '<div class="label">' + esc(it.name) + "</div></div>";
   }
 
   function appHTML(it) {
     if (NIGHT) return dockHTML(it);
-    var face;
+    var face, clearKind = glassGlyphType(it);
     if (it.kind === "screen") face = '<div class="face tool">' + ICONS.screen + "</div>";
     else if (it.kind === "input") face = inputFace(it);
     else if (it.kind === "more") face = '<div class="face tool">' + ICONS.more + "</div>";
@@ -2673,10 +2752,11 @@
     else if (it.kind === "devmode") face = '<div class="face tool">' + ICONS.devmode + "</div>";
     else if (it.kind === "smart") face = '<div class="face tool">' + window.smartHome.icon + "</div>";
     else if (it.banner) face = '<div class="face"><img src="' + esc(it.banner) + '" alt="" decoding="async"></div>';
-    else if (iconUrl(it.package)) face = '<div class="face icon" style="background:' + esc(it.colour || "#2a2a30") + '"><img src="' + esc(iconUrl(it.package)) + '" alt=""></div>';
+    else if (iconUrl(it.package)) face = '<div class="face icon"' + (clearKind ? '' : ' style="background:' + esc(it.colour || "#2a2a30") + '"') + '><img src="' + esc(iconUrl(it.package)) + '" alt=""></div>';
+    else if (clearKind) face = '<div class="face clear-fallback">' + glassFallback(clearKind) + '</div>';
     else face = '<div class="face word" style="background:' + esc(it.colour || "#2a2a30") + '">' + esc(it.name) + "</div>";
-    var cls = "tile app" + (it.kind === "input" ? " input-ic ic-" + esc(it.icon || "hdmi") : "");
-    return '<div class="' + cls + '">' + face + dotHTML(it) + '<div class="label">' + esc(it.name) + "</div></div>";
+    var cls = "tile app" + (clearKind ? " clear-always" : "") + (it.kind === "input" ? " input-ic ic-" + esc(it.icon || "hdmi") : "");
+    return '<div class="' + cls + '"' + (clearKind ? ' data-glyph-kind="' + clearKind + '"' : "") + '>' + face + dotHTML(it) + '<div class="label">' + esc(it.name) + "</div></div>";
   }
   // The small blue dot: an app not opened yet, or (on the gear tile) a new couch-tv release.
   function dotHTML(it) {
@@ -2688,6 +2768,7 @@
   function renderGrid() {
     document.documentElement.classList.toggle("expanded", expanded);
     document.documentElement.classList.toggle("lifting", !!lift);
+    renderDockWeather();
     gridItems = gridList();
     if (NIGHT) {
       // the dock is as wide as what is in it; More apps uses all twelve columns
@@ -2717,12 +2798,20 @@
   // (clearicon.js), drawn light on the glass tile. The focused app shows its own icon. An icon that
   // will not split cleanly keeps the grey version (app.css).
   function clearIcons() {
-    if (!GLASS_ICONS || !window.ClearIcon) return;
-    Array.prototype.forEach.call($("grid").querySelectorAll(".app .face:not(.tool):not(.word) > img"), function (im) {
-      var face = im.parentNode, src = im.getAttribute("src");
-      if (!src || face.querySelector(".glyph")) return;
+    if (!window.ClearIcon) return;
+    var selector = GLASS_ICONS ? ".app .face:not(.tool):not(.word) > img" : ".app.clear-always .face > img";
+    Array.prototype.forEach.call($("grid").querySelectorAll(selector), function (im) {
+      var face = im.parentNode, app = face.parentNode, src = im.getAttribute("src");
+      if (!src || face.querySelector(".glyph") || face.classList.contains("clear-fallback")) return;
       window.ClearIcon.get(src, function (g) {
-        if (!g || !face.parentNode || face.querySelector(".glyph")) return;
+        if (!face.parentNode || face.querySelector(".glyph") || face.classList.contains("clear-fallback")) return;
+        if (!g) {
+          if (app.classList.contains("clear-always")) {
+            face.innerHTML = glassFallback(app.getAttribute("data-glyph-kind"));
+            face.classList.add("clear-fallback");
+          }
+          return;
+        }
         var gi = document.createElement("img");
         gi.className = "glyph"; gi.alt = ""; gi.src = g;
         face.appendChild(gi);
@@ -2732,10 +2821,33 @@
   }
 
   // ---------------- focus ----------------
+  var paintedFocusEl = null;
+  function clearPaintedFocus() {
+    if (paintedFocusEl) paintedFocusEl.classList.remove("focus");
+    paintedFocusEl = null;
+  }
+  function paintTileFocus(el) {
+    if (paintedFocusEl && paintedFocusEl !== el) paintedFocusEl.classList.remove("focus");
+    paintedFocusEl = el || null;
+    if (el) el.classList.add("focus");
+  }
   function clearFocus() {
+    paintedFocusEl = null;
     shelfEls.concat(gridEls, quickEls).forEach(function (el) { if (el) el.classList.remove("focus"); });
     $("people").classList.remove("focus");
     Array.prototype.forEach.call($("people").children, function (el) { el.classList.remove("focus"); });
+  }
+
+  // The full app library can be taller than a TV screen. Keep the focused row inside its own
+  // scroll area rather than clipping apps above the screen or scrolling the page underneath it.
+  function revealGridFocus(el) {
+    if (!NIGHT || !expanded || !el) return;
+    var appsEl = $("apps-section");
+    var box = appsEl.getBoundingClientRect();
+    var tile = el.getBoundingClientRect();
+    var edge = 2 * innerWidth / 120;
+    if (tile.top < box.top + edge) appsEl.scrollTop -= box.top + edge - tile.top;
+    else if (tile.bottom > box.bottom - edge) appsEl.scrollTop += tile.bottom - box.bottom + edge;
   }
 
   function scrollShelf() {
@@ -2762,18 +2874,23 @@
     if (zone === "settings") { renderSettings(); return; }
     if (zone === "smart") { window.smartHome.paint(); return; }
     if (zone === "ambient") { renderAmbientMusic(); return; }
-    clearFocus();
+    // Focus changes on the app rail are hot-path work on the onn's GPU: remove the previous
+    // outline directly instead of sweeping every app tile for every D-pad repeat.
     renderHint();
-    if (npVisible()) renderNp();   // its buttons carry the focus only while zone is "np"
-    if (zone === "gear") { if (gridEls[g]) gridEls[g].classList.add("focus"); renderGear(); return; }
-    if (zone === "appmenu") { if (gridEls[g]) gridEls[g].classList.add("focus"); renderAppMenu(); return; }
-    if (zone === "shelfmenu") { if (shelfEls[s]) shelfEls[s].classList.add("focus"); renderShelfMenu(); return; }
-    if (zone === "updask") { renderAsk(); return; }
-    if (zone === "menu") { renderMenu(); return; }
-    if (zone === "inputs") { if (quickEls[qi]) quickEls[qi].classList.add("focus"); renderInputMenu(); return; }
-    if (zone === "pmenu") { renderPop(); $("people").classList.add("focus"); return; }
+    // Rebuild the now-playing card only while navigating its controls (or once when leaving
+    // them). Recreating its artwork and buttons on every app-grid D-pad repeat caused avoidable
+    // image decode and DOM work during the main scrolling path.
+    if (zone === "np" || npControlsFocused) renderNp();
+    if (zone === "gear") { if (gridEls[g]) { paintTileFocus(gridEls[g]); revealGridFocus(gridEls[g]); } else clearPaintedFocus(); renderGear(); return; }
+    if (zone === "appmenu") { if (gridEls[g]) { paintTileFocus(gridEls[g]); revealGridFocus(gridEls[g]); } else clearPaintedFocus(); renderAppMenu(); return; }
+    if (zone === "shelfmenu") { if (shelfEls[s]) paintTileFocus(shelfEls[s]); else clearPaintedFocus(); renderShelfMenu(); return; }
+    if (zone === "updask") { clearPaintedFocus(); renderAsk(); return; }
+    if (zone === "menu") { clearPaintedFocus(); renderMenu(); return; }
+    if (zone === "inputs") { if (quickEls[qi]) paintTileFocus(quickEls[qi]); else clearPaintedFocus(); renderInputMenu(); return; }
+    if (zone === "pmenu") { renderPop(); paintTileFocus($("people")); return; }
     if (zone === "np") {
       if (!npReach()) { zone = shelfEls.length ? "shelf" : "grid"; paintFocus(); return; }
+      clearPaintedFocus();
       renderNp();
       hero(null);
       $("place").style.visibility = "";
@@ -2781,22 +2898,22 @@
       return;
     }
     if (zone === "quick" && quickEls[qi]) {
-      quickEls[qi].classList.add("focus");
+      paintTileFocus(quickEls[qi]);
       hero(null);
       $("place").style.visibility = "";
       showPhoto();
       return;
     }
     if (zone === "people" && peopleOn()) {
-      if (isHead()) $("people").classList.add("focus");
-      else if ($("people").children[pi]) $("people").children[pi].classList.add("focus");   // drawn yet
+      if (isHead()) paintTileFocus($("people"));
+      else if ($("people").children[pi]) paintTileFocus($("people").children[pi]);   // drawn yet
       hero(null);
       $("place").style.visibility = "";
       showPhoto();
       return;
     }
     if (zone === "shelf" && shelfEls[s]) {
-      shelfEls[s].classList.add("focus");
+      paintTileFocus(shelfEls[s]);
       scrollShelf();
       if (NIGHT) return;   // the cards carry the titles; the photo stays put under the clock
       var cc = cardAt(s);
@@ -2813,7 +2930,7 @@
     } else {
       zone = "grid";
       g = Math.max(0, Math.min(g, gridEls.length - 1));
-      if (gridEls[g]) gridEls[g].classList.add("focus");
+      if (gridEls[g]) { paintTileFocus(gridEls[g]); revealGridFocus(gridEls[g]); }
       hero(null);
       $("place").style.visibility = "";
       showPhoto();
@@ -3513,7 +3630,7 @@
     rows.push(head(t("ambient_head")));
     rows.push({ kind: "action", key: "ambient", label: t("ambient_settings"), sub: t("ambient_settings_sub"),
       act: function () { openAmbientSettings(); } });
-    // Smart Idle & OLED-safe Ambient Mode
+    // Smart Idle and the scenic ambient clock
     rows.push(head(t("smart_idle_head")));
     rows.push({ kind: "toggle", key: "smart-idle-on", label: t("smart_idle_on"), sub: t("smart_idle_on_sub"),
       value: SMART_IDLE.enabled ? t("on") : t("off"), act: function () {

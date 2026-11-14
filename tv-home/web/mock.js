@@ -19,7 +19,7 @@
 //   icons=glass         home.glass_icons: Apple style clear app icons on glass
 //   amount=1..5         home.glass_amount, how clear the glass is (1 frosted, 3 the default, 5 very clear)
 //   clockstyle=liquid   home.clock_style: the Night clock as liquid glass
-//   unit=f              home.wx_unit: temperatures in Fahrenheit
+//   unit=f              home.wx_unit: temperatures in Fahrenheit     place=Seattle: preview the home at the user's location
 //   wxfx=1              home.ambient_weather: rain, snow and fog over the scenes (off unless set)
 //   sungrade=1          home.ambient_sun_grade: the sun's colour over the scenes (off unless set)
 //                       (also ?test_wx=<WMO code, 63 rain, 73 snow, 45 fog, 95 storm> and ?test_alt=<sun height, degrees>)
@@ -55,6 +55,10 @@
   var NAMES = ["Alex", "Sam", "Jordan", "Riley", "Casey", "Morgan", "Taylor", "Jamie"];
   var cfg = { weather: { lat: -33.8688, lon: 151.2093, place: "Sydney", timezone: "Australia/Sydney" },
     default_tv: "living-room", tvs: [{ id: "living-room", name: "Living room" }], home: {} };
+  if (arg("place") === "Seattle") {
+    cfg.weather = { lat: 47.6062, lon: -122.3321, place: "Seattle", timezone: "America/Los_Angeles" };
+  }
+  if (arg("unit")) cfg.home.wx_unit = arg("unit");
   var n = arg("people");
   if (n !== null) {
     cfg.people = NAMES.slice(0, Math.max(0, Math.min(8, parseInt(n, 10) || 0))).map(function (name) {
@@ -248,6 +252,17 @@
     return new Promise(function (resolve, reject) {
       setTimeout(function () {
         if (down) return reject(new Error("The computer isn't answering."));
+        // Weather is synthetic here so the dock pill and idle ambient preview work without an API key
+        // or depending on the preview user's location/network.
+        if (path.indexOf("/api/weather") === 0) {
+          var forecast = [], today = new Date(), wxCodes = [2, 1, 3, 61, 0];
+          for (var wi = 0; wi < 5; wi++) {
+            var wd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + wi);
+            var date = wd.getFullYear() + "-" + (wd.getMonth() < 9 ? "0" : "") + (wd.getMonth() + 1) + "-" + (wd.getDate() < 10 ? "0" : "") + wd.getDate();
+            forecast.push({ date: date, high: 18 - wi, low: 9 - wi, code: wxCodes[wi] });
+          }
+          return resolve({ ok: true, temp: 15, code: 2, text: "Partly cloudy", is_day: true, forecast: forecast });
+        }
         // Now playing (#31): ?music=1, a song that previous and next step through, play and pause toggle
         if (path.indexOf("/api/music") === 0) return resolve({ ok: true, music: arg("music") ? mockSong() : null });
         if (path.indexOf("/api/custom-cards") === 0) return resolve({ ok: true, cards: arg("cards") ? [

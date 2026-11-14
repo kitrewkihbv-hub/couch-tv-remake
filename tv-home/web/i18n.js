@@ -83,7 +83,7 @@
     smart_idle_on_sub: "Protect your screen and turn off idle or paused playback automatically",
     smart_idle_home: "Home screen idle after",
     smart_idle_action: "When home screen is idle",
-    smart_idle_act_ambient_clock: "OLED Ambient Clock",
+    smart_idle_act_ambient_clock: "Scenic Ambient Clock",
     smart_idle_act_screen_off: "Screen off",
     smart_idle_act_tv_off: "Turn TV off",
     smart_idle_paused: "Turn TV off when paused for",
