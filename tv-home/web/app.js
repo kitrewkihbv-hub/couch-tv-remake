@@ -297,6 +297,7 @@
   try { who = localStorage.getItem("tvhome.who"); } catch (e) {}
   var zone = "grid", s = 0, g = 0;   // focus: zone, shelf index, grid index
   var shelfEls = [], gridEls = [], gridItems = [];
+  var lastRevealedGridRow = -1, lastRevealScrollTop = -1;
   var touched = false, expanded = false;
   var retryTimer = null, retryMs = 2500, statusTimer = null;
   var pmi = 0, plift = false;        // the people list: focused row, and whether that row is picked up
@@ -884,7 +885,7 @@
   var vidTimer = null;
   function startVideo() {
     var v = $("bgvid"), root = document.documentElement;
-    if (!VIDEO_ON) return;
+    if (!VIDEO_ON || expanded) return;
     if (v.getAttribute("src") !== VIDEO_URL) {
       root.classList.remove("has-video");
       v.onplaying = function () { clearTimeout(vidTimer); root.classList.add("has-video"); };
@@ -918,7 +919,7 @@
   function sceneVideos(on) {
     var calm = false;
     try { calm = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); } catch (e) {}
-    on = on && NIGHT && !calm && !idleAmbientActive && !screenOffActive;
+    on = on && NIGHT && !calm && !expanded && !idleAmbientActive && !screenOffActive;
     sceneEls.forEach(function (el, k) {
       var v = el.querySelector(".svid");
       if (!v) return;
@@ -1062,7 +1063,7 @@
 
   function applySunSync() {
     // the clock ticks before buildScenes() has made the scenes: wait for them (sun_sync on in config.json)
-    if (!NIGHT || !SUN_SYNC || !SCENES.length || sceneEls.length !== SCENES.length || !sceneMayChange()) return;
+    if (!NIGHT || expanded || !SUN_SYNC || !SCENES.length || sceneEls.length !== SCENES.length || !sceneMayChange()) return;
     var targetId = sunTargetScene();
     var idx = SCENES.map(function (s) { return s.id; }).indexOf(targetId);
     if (idx >= 0 && idx !== scene) {
@@ -1072,6 +1073,7 @@
 
   // the settings screen covers the scenes, so they wait (one less thing for a small TV stick to draw)
   function nextScene() {
+    if (expanded) return;   // keep the scene stable and stop background DOM changes while browsing apps
     if (zone !== "settings" && sceneMayChange()) {
       if (SUN_SYNC) applySunSync();
       else showScene(nextFrom(scene));
@@ -1107,17 +1109,36 @@
 
   // The bridge's reading for the place in config.json, or straight from Open-Meteo with no bridge
   // or when Home settings chose another place. Hidden when Home settings switched the weather off.
+  var WEATHER_CACHE_KEY = "tvhome.weather.cache.v1", WEATHER_CACHE_MAX_AGE = 36 * 60 * 60 * 1000;
+  function cachedWeather() {
+    var saved = kept(WEATHER_CACHE_KEY);
+    if (!saved || !saved.weather || !isFinite(Number(saved.at)) || Date.now() - Number(saved.at) > WEATHER_CACHE_MAX_AGE ||
+        Number(saved.lat) !== Number(WXCFG.lat) || Number(saved.lon) !== Number(WXCFG.lon)) return null;
+    return saved.weather;
+  }
+  function validWeather(j) { return !!(j && isFinite(Number(j.temp)) && isFinite(Number(j.code))); }
   function refreshWeather() {
     if (!NIGHT || !WX_SHOW) {
       updateAmbientWeather();
       return Promise.resolve();
     }
     var direct = OFFLINE || !!(ST.place && isFinite(ST.place.lat));
-    return (direct ? weatherDirect() : api("GET", "/api/weather")).then(function (j) {
+    // A configured bridge is helpful, but weather shouldn't disappear just because its computer is
+    // asleep. Try Open-Meteo directly as a fallback, then retain a recent successful reading offline.
+    var request = direct ? weatherDirect() : api("GET", "/api/weather").catch(function () { return weatherDirect(); });
+    return request.then(function (j) {
+      if (!validWeather(j)) throw new Error("Invalid weather response");
       data.weather = j;
+      keep(WEATHER_CACHE_KEY, { at: Date.now(), lat: Number(WXCFG.lat), lon: Number(WXCFG.lon), weather: j });
       clock();
       updateAmbientWeather();
-    }, function () {});
+    }).catch(function () {
+      var previous = cachedWeather();
+      if (!previous) return;
+      data.weather = previous;
+      clock();
+      updateAmbientWeather();
+    });
   }
 
   // Open-Meteo (free, no key), the same call the bridge makes. The words come from i18n.js.
@@ -1129,7 +1150,13 @@
     var url = "https://api.open-meteo.com/v1/forecast?latitude=" + WXCFG.lat + "&longitude=" + WXCFG.lon +
       "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=" +
       encodeURIComponent(WXCFG.timezone || "auto") + "&forecast_days=5";
-    return fetch(url).then(function (r) { return r.json(); }).then(function (j) {
+    return fetch(url, { cache: "no-store" }).then(function (r) {
+      if (!r.ok) throw new Error("Weather service returned " + r.status);
+      return r.json();
+    }).then(function (j) {
+      if (!j || !j.current || !isFinite(Number(j.current.temperature_2m)) || !isFinite(Number(j.current.weather_code))) {
+        throw new Error("Weather service returned incomplete data");
+      }
       var c = j.current, d = j.daily || {}, code = Math.round(c.weather_code), forecast = [];
       var dates = d.time || [], highs = d.temperature_2m_max || [], lows = d.temperature_2m_min || [], codes = d.weather_code || [];
       for (var i = 0; i < Math.min(5, dates.length); i++) {
@@ -2461,8 +2488,9 @@
   function renderHint() {
     var text = hintFlash ||
       (lift ? t("app_lift_hint") : NIGHT && expanded && zone === "grid" ? t("app_add_hint") : "");
-    $("hint").textContent = text;
-    $("hint").classList.toggle("on", !!text);
+    var el = $("hint");
+    if (el.textContent !== text) el.textContent = text;
+    el.classList.toggle("on", !!text);
     document.documentElement.classList.toggle("hinting", !!text);
   }
   function flash(text) {
@@ -2766,13 +2794,26 @@
   }
 
   function renderGrid() {
+    var wasExpanded = document.documentElement.classList.contains("expanded");
     document.documentElement.classList.toggle("expanded", expanded);
+    if (wasExpanded !== expanded) {
+      sceneVideos(!expanded);
+      var backgroundVideo = $("bgvid");
+      if (expanded) backgroundVideo.pause(); else startVideo();
+    }
     document.documentElement.classList.toggle("lifting", !!lift);
+    var title = $("apps-title");
+    if (title) {
+      title.textContent = expanded ? t("more_apps") : "";
+      title.setAttribute("aria-hidden", expanded ? "false" : "true");
+    }
     renderDockWeather();
     gridItems = gridList();
+    lastRevealedGridRow = -1;
+    lastRevealScrollTop = -1;
     if (NIGHT) {
-      // the dock is as wide as what is in it; More apps uses all twelve columns
-      GRID_COLS = expanded ? 12 : Math.max(1, Math.min(12, gridItems.length));
+      // Six columns make the expanded library feel like a real screen, even with a dozen apps.
+      GRID_COLS = expanded ? 6 : Math.max(1, Math.min(12, gridItems.length));
       $("grid").style.gridTemplateColumns = "repeat(" + GRID_COLS + ", 7rem)";
     }
     $("grid").innerHTML = gridItems.map(appHTML).join("");
@@ -2842,12 +2883,17 @@
   // scroll area rather than clipping apps above the screen or scrolling the page underneath it.
   function revealGridFocus(el) {
     if (!NIGHT || !expanded || !el) return;
-    var appsEl = $("apps-section");
+    var appsEl = $("apps-section"), row = Math.floor(g / GRID_COLS), scrollTop = appsEl.scrollTop;
+    // Horizontal moves stay in the same row: skip forced layout reads until focus reaches a new
+    // row or the scroll position has changed. This matters on lower-power TV WebViews.
+    if (row === lastRevealedGridRow && scrollTop === lastRevealScrollTop) return;
     var box = appsEl.getBoundingClientRect();
     var tile = el.getBoundingClientRect();
     var edge = 2 * innerWidth / 120;
     if (tile.top < box.top + edge) appsEl.scrollTop -= box.top + edge - tile.top;
     else if (tile.bottom > box.bottom - edge) appsEl.scrollTop += tile.bottom - box.bottom + edge;
+    lastRevealedGridRow = row;
+    lastRevealScrollTop = appsEl.scrollTop;
   }
 
   function scrollShelf() {
@@ -2931,9 +2977,11 @@
       zone = "grid";
       g = Math.max(0, Math.min(g, gridEls.length - 1));
       if (gridEls[g]) { paintTileFocus(gridEls[g]); revealGridFocus(gridEls[g]); }
-      hero(null);
-      $("place").style.visibility = "";
-      showPhoto();
+      if (!expanded) {
+        hero(null);
+        $("place").style.visibility = "";
+        showPhoto();
+      }
     }
     renderHint();
   }
@@ -3241,7 +3289,10 @@
     }
     var a = gridItems[g], el = gridEls[g];
     if (!a) return;
-    if (a.kind === "more") { dockBack = null; expanded = true; renderGrid(); paintFocus(); return; }
+    if (a.kind === "more") {
+      dockBack = gridItems.length > 1 ? gridKey(gridItems[0]) : null;
+      expanded = true; g = 0; renderGrid(); paintFocus(); return;
+    }
     if (a.kind === "gear") { openGear(); return; }
     if (a.kind === "smart") { openSmart(); return; }
     if (a.kind === "devmode") { openDevMode(); return; }

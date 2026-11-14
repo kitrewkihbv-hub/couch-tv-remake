@@ -377,7 +377,7 @@ html.still .tile.focus .face, html.still .tile.focus .face::after { animation: n
 .theme-night .qbtn.focus { background: #fff; color: #111; }
 
 /* Keep watching: three glass cards */
-.theme-night .shelf { top: 40rem; left: var(--safe-x); right: var(--safe-x); }
+.theme-night .shelf { top: 37rem; left: var(--safe-x); right: var(--safe-x); }
 .theme-night .shelf-head { height: 2.25rem; margin-bottom: 1rem; }
 .theme-night .shelf-head h2 { font-size: 1.5625rem; font-weight: 600; color: rgba(255, 255, 255, 0.78); }
 .theme-night .shelf-track { gap: 1.375rem; }
@@ -405,10 +405,7 @@ html.still .tile.focus .face, html.still .tile.focus .face::after { animation: n
   box-shadow: inset 0 0.0625rem 0 rgba(255, 255, 255, 0.24), 0 0.75rem 2rem rgba(0, 0, 0, 0.24); text-shadow: 0 1px 0.5rem rgba(0, 0, 0, 0.55);
   white-space: nowrap; overflow: hidden;
 }
-.theme-night .dock-weather.on {
-  position: fixed; top: 50%; left: 50%; z-index: 4; margin: 0;
-  transform: translate(-50%, -50%); font-size: 1.125rem;
-}
+.theme-night .dock-weather.on { font-size: 1.125rem; }
 .dock-wx-icon { display: inline-flex; flex: none; align-items: center; }
 .dock-wx-icon svg { width: 1.75rem; height: 1.75rem; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
 .dock-wx-temp { font-size: 1.5rem; line-height: 1.75rem; font-weight: 700; }
@@ -441,16 +438,33 @@ html.still .tile.focus .face, html.still .tile.focus .face::after { animation: n
 .theme-night .app .face.tool { background: rgba(255, 255, 255, 0.14); }
 .theme-night .app .face.word { font-size: 1.125rem; padding: 0 0.5rem; background: #2a2a30; }
 .theme-night .app .label { top: calc(100% + 0.75rem); }
-/* More apps: turn the dock into a screen-sized, scrollable app library. Fixed-size cells and twelve
-   columns keep remotes' left/right/up/down navigation predictable even with dozens of installed apps. */
-.theme-night.expanded .shelf { display: none; }
+/* More apps is a distinct, readable library rather than the dock merely lifted in front of the clock.
+   Six columns make even a modest installed-app list visibly expand into rows, and avoid a huge 12-column
+   relayout/blur surface on the onn's GPU. */
+.theme-night.expanded .top, .theme-night.expanded .shelf,
+.theme-night.expanded .scene .gclock, .theme-night.expanded .scene .date { display: none !important; }
 .theme-night.expanded .apps {
-  position: fixed; top: 9.5rem; right: var(--safe-x); bottom: 2rem; left: var(--safe-x);
-  width: auto; padding: 0.75rem 0.5rem 2rem; transform: none;
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 5;
+  width: auto; padding: var(--safe-y) var(--safe-x) 2.5rem; transform: none; box-sizing: border-box;
   overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none;
+  background: rgba(5, 8, 14, 0.82);
 }
 .theme-night.expanded .apps::-webkit-scrollbar { display: none; }
-.theme-night.expanded .grid { width: 100%; grid-template-columns: repeat(12, 7rem); justify-content: center; }
+.theme-night.expanded .bg img, .theme-night.expanded .scene,
+.theme-night.expanded .scene * { animation: none !important; transition: none !important; }
+.apps-title { display: none; }
+.theme-night.expanded .apps-title {
+  display: block; margin: 0 0 1.25rem; padding: 0 1.5rem;
+  font-size: 2.25rem; line-height: 2.75rem; font-weight: 650; color: rgba(255, 255, 255, 0.94);
+}
+.theme-night.expanded .grid {
+  width: 100%; grid-template-columns: repeat(6, 7rem); justify-content: center;
+  padding: 1rem 1.5rem 2.5rem; gap: 2.5rem 1.625rem;
+  background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+.theme-night.expanded .app, .theme-night.expanded .app .face { transition: none !important; }
+.theme-night.expanded .app.focus { transform: none; }
+.theme-night.expanded .app.focus .face { box-shadow: 0 0 0 0.22rem #fff; }
 .theme-night.expanded .dock-weather { display: none; }
 .old-engine.theme-night.expanded .grid { margin-left: auto; margin-right: auto; }
 

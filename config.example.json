@@ -31,17 +31,26 @@
     "scene_seconds": 20,
     "dock_size": 10,
     "sun_sync": false,
+    "glass": "on",
+    "wx_unit": "f",
+    "smart_idle": {
+      "enabled": true,
+      "home_idle_minutes": 5,
+      "home_action": "ambient_clock",
+      "paused_idle_minutes": 30,
+      "quiet_hours": { "enabled": false, "start": "23:00", "end": "06:00", "idle_minutes": 15 }
+    },
     "hide_packages": []
   },
   "phone_remote": true,
   "ask": { "enabled": false },
   "weather": {
-    "lat": -33.8688,
-    "lon": 151.2093,
-    "place": "Sydney",
-    "timezone": "Australia/Sydney"
+    "lat": 47.6062,
+    "lon": -122.3321,
+    "place": "Seattle",
+    "timezone": "America/Los_Angeles"
   },
-  "country": "AU",
+  "country": "US",
   "screens": [],
   "home_assistant": {
     "enabled": false,

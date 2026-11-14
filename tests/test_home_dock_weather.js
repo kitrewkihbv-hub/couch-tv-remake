@@ -8,6 +8,7 @@ const css = fs.readFileSync(path.join(__dirname, "..", "tv-home", "web", "app.cs
 const html = fs.readFileSync(path.join(__dirname, "..", "tv-home", "web", "index.html"), "utf8");
 const mock = fs.readFileSync(path.join(__dirname, "..", "tv-home", "web", "mock.js"), "utf8");
 const bridge = fs.readFileSync(path.join(__dirname, "..", "bridge", "server.py"), "utf8");
+const config = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "config.example.json"), "utf8"));
 
 function sourceOf(name) {
   const re = new RegExp("function " + name + "\\([^)]*\\) \\{[\\s\\S]*?\\n  \\}");
@@ -73,12 +74,25 @@ renderIdleForecast(null);
 assert(!forecastNode.classList.contains("on"), "the ambient forecast box hides cleanly if weather is disabled or absent");
 
 assert(html.includes('id="dock-weather"'), "the dock weather region exists in the home page");
+assert(html.indexOf('id="dock-weather"') < html.indexOf('id="grid"'), "dock weather is laid out immediately above the app row");
+assert(!/\.theme-night \.dock-weather\.on \{[^}]*position: fixed/.test(css), "dock weather no longer floats over the center of the screen");
 assert(html.includes('id="idle-forecast"'), "the ambient screen has a dedicated forecast region");
 assert(/\/api\/weather[\s\S]*?temp: 15, code: 2[\s\S]*?forecast: forecast/.test(mock), "the mock preview returns deterministic current and forecast weather without a network call");
 assert(/forecast_days=5/.test(js) && /forecast_days=5/.test(bridge), "both bridge and offline weather requests load five forecast days");
 assert(/"forecast": forecast/.test(bridge), "the bridge weather response includes daily forecast data");
 assert(/\.theme-night\.expanded \.apps[\s\S]*?overflow-y: auto/.test(css), "More apps is a scrollable TV-sized library");
+assert(/\.theme-night\.expanded \.top[\s\S]*?\.scene \.gclock[\s\S]*?display: none/.test(css), "the app library hides the home clock instead of showing it behind the apps");
+assert(/\.theme-night\.expanded \.grid[\s\S]*?repeat\(6, 7rem\)/.test(css) && /GRID_COLS = expanded \? 6/.test(js),
+  "More apps uses a six-column grid so installed apps visibly expand into rows");
+assert(html.includes('id="apps-title"'), "the expanded app library has its own heading");
 assert(/function revealGridFocus[\s\S]*?scrollTop/.test(js), "remote focus keeps long app lists in view");
+assert(/row === lastRevealedGridRow && scrollTop === lastRevealScrollTop/.test(js),
+  "horizontal focus moves avoid repeated layout reads while scrolling the app library");
+assert(/api\("GET", "\/api\/weather"\)\.catch\(function \(\) \{ return weatherDirect\(\); \}\)/.test(js) && /WEATHER_CACHE_MAX_AGE/.test(js),
+  "weather falls back to a direct request and a recent cached reading when the bridge is unavailable");
+assert.strictEqual(config.weather.place, "Seattle", "the packaged default weather location matches the target device");
+assert.strictEqual(config.home.wx_unit, "f", "the packaged home uses Fahrenheit");
+assert.strictEqual(config.home.smart_idle.enabled, true, "the scenic ambient screen activates when the home has been idle");
 assert(/ctx_hide/.test(js) && /app_hidden/.test(js), "apps remain hideable and recoverable in Home settings");
 assert(/\.theme-night \.app\.tile\.focus \.face, \.theme-night \.app\.tile\.focus \.face::after \{ animation: none; \}/.test(css),
   "focused app tiles do not run the expensive perpetual sway/glint animations");
