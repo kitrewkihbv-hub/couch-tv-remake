@@ -1,4 +1,4 @@
-// Regression tests for the weather pill and scrollable More apps library.
+// Regression tests for home weather visibility, the Ambient dock action, and low-cost app focus.
 const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
@@ -80,14 +80,12 @@ assert(html.includes('id="idle-forecast"'), "the ambient screen has a dedicated 
 assert(/\/api\/weather[\s\S]*?temp: 15, code: 2[\s\S]*?forecast: forecast/.test(mock), "the mock preview returns deterministic current and forecast weather without a network call");
 assert(/forecast_days=5/.test(js) && /forecast_days=5/.test(bridge), "both bridge and offline weather requests load five forecast days");
 assert(/"forecast": forecast/.test(bridge), "the bridge weather response includes daily forecast data");
-assert(/\.theme-night\.expanded \.apps[\s\S]*?overflow-y: auto/.test(css), "More apps is a scrollable TV-sized library");
-assert(/\.theme-night\.expanded \.top[\s\S]*?\.scene \.gclock[\s\S]*?display: none/.test(css), "the app library hides the home clock instead of showing it behind the apps");
-assert(/\.theme-night\.expanded \.grid[\s\S]*?repeat\(6, 7rem\)/.test(css) && /GRID_COLS = expanded \? 6/.test(js),
-  "More apps uses a six-column grid so installed apps visibly expand into rows");
-assert(html.includes('id="apps-title"'), "the expanded app library has its own heading");
-assert(/function revealGridFocus[\s\S]*?scrollTop/.test(js), "remote focus keeps long app lists in view");
-assert(/row === lastRevealedGridRow && scrollTop === lastRevealScrollTop/.test(js),
-  "horizontal focus moves avoid repeated layout reads while scrolling the app library");
+assert(/function ambientItem\(\)[\s\S]*?kind: "ambient"/.test(js), "the dock replaces More apps with an Ambient tile");
+assert(/list\.push\(ambientItem\(\)\)/.test(js) && /a\.kind === "ambient"/.test(js),
+  "the Ambient tile is present and launches the existing ambient clock");
+assert(!/list\.push\(moreItem\(\)\)/.test(js) && !/kind: "more"/.test(js), "the slow All apps entry is not generated anymore");
+assert(/GRID_COLS = expanded \? 6 : Math\.max\(1, Math\.min\(12, gridItems\.length, fitCols \|\| 1\)\)/.test(js),
+  "the dock wraps to the available TV width instead of clipping a long app row");
 assert(/api\("GET", "\/api\/weather"\)\.catch\(function \(\) \{ return weatherDirect\(\); \}\)/.test(js) && /WEATHER_CACHE_MAX_AGE/.test(js),
   "weather falls back to a direct request and a recent cached reading when the bridge is unavailable");
 assert.strictEqual(config.weather.place, "Seattle", "the packaged default weather location matches the target device");
@@ -96,6 +94,10 @@ assert.strictEqual(config.home.smart_idle.enabled, true, "the scenic ambient scr
 assert(/ctx_hide/.test(js) && /app_hidden/.test(js), "apps remain hideable and recoverable in Home settings");
 assert(/\.theme-night \.app\.tile\.focus \.face, \.theme-night \.app\.tile\.focus \.face::after \{ animation: none; \}/.test(css),
   "focused app tiles do not run the expensive perpetual sway/glint animations");
+assert(/\.theme-night \.app\.focus \{ transform: none; \}/.test(css) && /\.theme-night \.app\.tile, \.theme-night \.app \.face, \.theme-night \.app \.label \{ transition: none !important; \}/.test(css),
+  "app focus is a static outline without GPU-heavy scaling or transition work");
+assert(/function refreshWeather\(\)[\s\S]*?if \(!WX_SHOW\)/.test(js), "weather refresh is not restricted to the Night theme");
+assert(/var w = WX_SHOW && data\.weather/.test(sourceOf("renderDockWeather")), "the weather pill renders whenever a reading is available, in any theme");
 assert(/font-size: 17rem/.test(css) && /rgba\(5, 8, 14, 0\.12\)/.test(css), "idle ambient clock is large over the scenic background");
 const glassGlyphType = new Function("", sourceOf("glassGlyphType") + "; return glassGlyphType;")();
 [

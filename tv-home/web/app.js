@@ -234,7 +234,7 @@
     screen: '<svg viewBox="0 0 24 24"><rect x="2.5" y="3.5" width="19" height="13" rx="2"/><path d="M9 20.5h6M12 16.5v4"/></svg>',
     moon: '<svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>',
     picture: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17a8.5 8.5 0 0 0 0-17z" class="fill"/></svg>',
-    more: '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>',
+    ambient: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/><path d="M4.8 5.5 3 7.3m16.2-1.8L21 7.3"/></svg>',
     gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
     look: '<svg viewBox="0 0 24 24"><rect x="2.5" y="4.5" width="19" height="15" rx="3"/><path d="M2.5 16l5.5-5.5 4.5 4.5 3-3 6 6"/><circle cx="16.5" cy="8.8" r="1.6"/></svg>',
     soundscape: '<svg viewBox="0 0 24 24"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>',
@@ -631,7 +631,7 @@
   function renderDockWeather() {
     var el = $("dock-weather");
     if (!el) return;
-    var w = NIGHT && WX_SHOW && data.weather && data.weather.temp != null ? data.weather : null;
+    var w = WX_SHOW && data.weather && data.weather.temp != null ? data.weather : null;
     if (!w || expanded) {
       el.classList.remove("on");
       el.innerHTML = "";
@@ -678,7 +678,7 @@
     var loc = window.I18N ? window.I18N.locale() : "en-AU";
     var day = d.toLocaleDateString(loc, { weekday: "long", day: "numeric", month: "long" }).replace(",", "");
     day = day.charAt(0).toUpperCase() + day.slice(1);   // "lunes 27 de octubre" starts a line on screen
-    var w = NIGHT && WX_SHOW && data.weather && data.weather.temp != null ? data.weather : null;
+    var w = WX_SHOW && data.weather && data.weather.temp != null ? data.weather : null;
     $("date").innerHTML = '<span class="dline">' + esc(day) + (w ? '<span class="wx">' + wxIcon(w) + esc(tempText(w.temp)) +
       '<span class="ww"> ' + esc(wxText(w)) + "</span></span>" : "") + "</span>";
     renderDockWeather();
@@ -1118,7 +1118,9 @@
   }
   function validWeather(j) { return !!(j && isFinite(Number(j.temp)) && isFinite(Number(j.code))); }
   function refreshWeather() {
-    if (!NIGHT || !WX_SHOW) {
+    if (!WX_SHOW) {
+      data.weather = null;
+      clock();
       updateAmbientWeather();
       return Promise.resolve();
     }
@@ -2342,7 +2344,7 @@
   // The gear tile: always there, whatever the TV calls its own settings app. OK opens a small menu,
   // Home settings (this page's own) or TV settings (Android's).
   function gearItem() { return { kind: "gear", name: t("settings"), package: SETTINGS_PKG }; }
-  function moreItem() { return { kind: "more", name: t("more_apps") }; }
+  function ambientItem() { return { kind: "ambient", name: t("ambient_tile") }; }
   // Smart home (optional, smarthome.js): its tile sits just before the gear tile, only when
   // config.json has a home_assistant section with rooms or scenes. Otherwise nothing changes.
   function smartOn() { return !!(window.smartHome && window.smartHome.available()); }
@@ -2407,14 +2409,13 @@
     var tools = toolItems();
     if (expanded) return list.concat(extra, tools);
     if (extra.length || list.length > GRID_MAX - tools.length) {
-      list = list.slice(0, GRID_MAX - 1 - tools.length).concat(tools, [moreItem()]);
-    } else list = list.concat(tools);
+      list = list.slice(0, GRID_MAX - 1 - tools.length).concat(tools, [ambientItem()]);
+    } else list = list.concat(tools, [ambientItem()]);
     return list;
   }
 
-  // Night: a dock of the first ten apps (home.dock_size), then Settings, then More apps (which shows
-  // everything). The order and the More apps line come from Arrange apps on the
-  // phone, or from moving apps with the TV remote (hold OK), once one is saved.
+  // Night: a dock of the first apps (home.dock_size), then Settings and Ambient. Apps beyond the
+  // dock remain manageable in Home settings rather than opening a slow full-screen library.
   function arrangeItems() {
     var rest = shownApps().filter(function (a) { return a.package !== SETTINGS_PKG; });
     var screens = data.screens.map(function (sc) {
@@ -2444,7 +2445,7 @@
     var arr = arrangeItems();
     var list = expanded ? arr.items.slice() : arr.items.slice(0, arr.line);
     list = list.concat(toolItems());
-    if (!expanded && !(STANDALONE && !data.apps.length)) list.push(moreItem());   // standalone: no app list behind it
+    if (!expanded) list.push(ambientItem());
     return list;
   }
 
@@ -2504,7 +2505,7 @@
   function holdApp() {
     var a = gridItems[g];
     if (!a || a.kind === "more") return false;
-    if (a.kind === "gear" || a.kind === "smart" || a.kind === "devmode" || a.kind === "screen") { flash(t("stays_put", { name: a.name })); return true; }
+    if (a.kind === "gear" || a.kind === "smart" || a.kind === "devmode" || a.kind === "screen" || a.kind === "ambient") { flash(t("stays_put", { name: a.name })); return true; }
     if (a.kind !== "app") return startMove();
     openAppMenu(a);
     return true;
@@ -2759,7 +2760,7 @@
     var face, clearKind = glassGlyphType(it);
     if (it.kind === "screen") face = '<div class="face tool">' + ICONS.screen + "</div>";
     else if (it.kind === "input") face = inputFace(it);
-    else if (it.kind === "more") face = '<div class="face tool">' + ICONS.more + "</div>";
+    else if (it.kind === "ambient") face = '<div class="face tool">' + ICONS.ambient + "</div>";
     else if (it.kind === "gear") face = '<div class="face tool">' + ICONS.gear + "</div>";
     else if (it.kind === "devmode") face = '<div class="face tool">' + ICONS.devmode + "</div>";
     else if (it.kind === "smart") face = '<div class="face tool">' + window.smartHome.icon + "</div>";
@@ -2775,7 +2776,7 @@
     var face, clearKind = glassGlyphType(it);
     if (it.kind === "screen") face = '<div class="face tool">' + ICONS.screen + "</div>";
     else if (it.kind === "input") face = inputFace(it);
-    else if (it.kind === "more") face = '<div class="face tool">' + ICONS.more + "</div>";
+    else if (it.kind === "ambient") face = '<div class="face tool">' + ICONS.ambient + "</div>";
     else if (it.kind === "gear") face = '<div class="face tool">' + ICONS.gear + "</div>";
     else if (it.kind === "devmode") face = '<div class="face tool">' + ICONS.devmode + "</div>";
     else if (it.kind === "smart") face = '<div class="face tool">' + window.smartHome.icon + "</div>";
@@ -2813,7 +2814,10 @@
     lastRevealScrollTop = -1;
     if (NIGHT) {
       // Six columns make the expanded library feel like a real screen, even with a dozen apps.
-      GRID_COLS = expanded ? 6 : Math.max(1, Math.min(12, gridItems.length));
+      var remPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+      var tilePx = 7 * remPx, gapPx = 1.625 * remPx;
+      var fitCols = Math.floor((Math.max(0, innerWidth - 11.5 * remPx) + gapPx) / (tilePx + gapPx));
+      GRID_COLS = expanded ? 6 : Math.max(1, Math.min(12, gridItems.length, fitCols || 1));
       $("grid").style.gridTemplateColumns = "repeat(" + GRID_COLS + ", 7rem)";
     }
     $("grid").innerHTML = gridItems.map(appHTML).join("");
@@ -3118,13 +3122,6 @@
         g -= GRID_COLS;
       } else if (row < lastRow) {
         g = Math.min(g + GRID_COLS, gridEls.length - 1);
-      } else if (dy > 0 && !expanded && gridItems.some(function (x) { return x.kind === "more"; })) {
-        // Down from the bottom row of the dock opens the full apps view (#98), on the same app
-        dockBack = gridKey(gridItems[g]);
-        expanded = true; renderGrid();
-        var at = -1;
-        gridItems.forEach(function (x, i) { if (at < 0 && gridKey(x) === dockBack) at = i; });
-        g = at >= 0 ? at : Math.min(g, gridEls.length - 1);
       }
     }
     paintFocus();
@@ -3289,10 +3286,7 @@
     }
     var a = gridItems[g], el = gridEls[g];
     if (!a) return;
-    if (a.kind === "more") {
-      dockBack = gridItems.length > 1 ? gridKey(gridItems[0]) : null;
-      expanded = true; g = 0; renderGrid(); paintFocus(); return;
-    }
+    if (a.kind === "ambient") { setIdleAmbient(true); return; }
     if (a.kind === "gear") { openGear(); return; }
     if (a.kind === "smart") { openSmart(); return; }
     if (a.kind === "devmode") { openDevMode(); return; }
@@ -5017,9 +5011,9 @@
       setTimeout(warmSound, 2000);
       // the clock font must be in before the glass is measured
       if (document.fonts) document.fonts.load("300 10px Antonio").then(function () { glassShown = ""; clock(); });
-      refreshWeather();
-      setInterval(refreshWeather, WX_EVERY * 60000);
     }
+    refreshWeather();
+    setInterval(refreshWeather, WX_EVERY * 60000);
     photo = photoForHour(new Date().getHours());
     showPhoto();
     startVideo();

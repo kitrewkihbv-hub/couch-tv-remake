@@ -7,7 +7,7 @@ const context = {
   STANDALONE: false, NIGHT: true, HIDDEN_TV: [], g: 0, lift: null,
   gridItems: [], gridEls: Array(12), hintFlash: '',
   resolveInputs: () => [], toolItems: () => [{ kind: 'gear' }],
-  moreItem: () => ({ kind: 'more' }), t: key => key,
+  ambientItem: () => ({ kind: 'ambient' }), t: key => key,
   renderGrid() { context.gridItems = context.dockList(); },
   paintFocus() {}, persistOrder() {}, flash() {},
   openAppMenu(app) { context.menuApp = app; }
@@ -75,5 +75,8 @@ for (const storePkg of ['com.amazon.venezia', 'com.android.vending']) {
   context.HIDDEN_TV = [];
 }
 context.data = { apps: [app('com.netflix.ninja')], screens: [], order: null };
+context.expanded = false;
 assert(!packages(context.dockList()).some(pkg => context.TUCKED.includes(pkg)), 'no synthetic store');
+assert.strictEqual(context.dockList().at(-1).kind, 'ambient', 'Ambient replaces the old More apps dock entry');
+assert(!context.dockList().some(item => item.kind === 'more'), 'the dock no longer includes the laggy full-library entry');
 console.log('App Store ordering and movement tests passed.');
