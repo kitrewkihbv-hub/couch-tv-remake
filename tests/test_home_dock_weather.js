@@ -112,8 +112,8 @@ assert(/function placeAppFocusFrame\([\s\S]*?getBoundingClientRect\(\)[\s\S]*?cu
   "the focus frame accounts for the app's lift so its center stays over the icon");
 assert(/\.theme-night\.expanded \.app \.label \{[\s\S]*?opacity: 1[\s\S]*?white-space: normal/.test(css) && /grid-auto-rows: 10rem/.test(css),
   "app names are wrapped inside their own app-drawer tile rows");
-assert(/background: rgba\(20, 22, 30, 0\.78\)/.test(css) && /backdrop-filter: blur\(1rem\) saturate\(135%\)/.test(css),
-  "expanded app tiles have a dark frosted-glass backing");
+assert(/background: rgba\(20, 22, 30, 0\.78\)/.test(css) && /Every Night-look app gets its own dark frosted tile/.test(css) && /backdrop-filter: none !important/.test(css),
+  "all app tiles use a dark translucent glass appearance without expensive per-icon blur");
 assert(/\.settings \.srow\.focus, \.settings \.ssec\.focus[\s\S]*?transform: none !important[\s\S]*?box-shadow: none !important/.test(css) && /scroll-behavior: auto/.test(css),
   "settings focus and list scrolling avoid expensive animation and smooth-scroll lag");
 assert(/function setMove\([\s\S]*?focusSettingsRow\(previousRow, oldConfirm, rows\)/.test(js) && /function focusSettingsRow\(/.test(js),
@@ -121,8 +121,8 @@ assert(/function setMove\([\s\S]*?focusSettingsRow\(previousRow, oldConfirm, row
 assert(/font-variant-numeric: tabular-nums/.test(css) && /\.idle-date[\s\S]*?width: 88vw[\s\S]*?font-size: 2\.35rem/.test(css) && /\.idle-wx[\s\S]*?margin: 3\.5rem auto 0/.test(css),
   "ambient time and date stay centered, with a clear gap before the weather");
 assert(/\.dock-wx-temp \{ font-size: 2\.125rem/.test(css) && /min-height: 4\.125rem/.test(css), "the dock weather pill and temperature are larger and easier to read");
-assert(/\.theme-night \.app\.tile \{ transition: transform 320ms cubic-bezier\(\.16,\.84,\.2,1\)/.test(css) && /\.app-focus-frame \{[\s\S]*?transition: transform 320ms/.test(css),
-  "the app highlight and lifted tile use a longer, matched easing for smoother movement");
+assert(/\.theme-night \.app\.tile \{ transition: transform 200ms cubic-bezier\(\.22,\.61,\.36,1\)/.test(css) && /\.app-focus-frame \{[\s\S]*?transition: transform 200ms/.test(css),
+  "the app highlight and lifted tile use matched, responsive easing for smooth movement");
 assert(/Every Night-look app gets its own dark frosted tile/.test(css) && /html\.theme-night \.app \.face/.test(css),
   "every app icon receives its own dark glass background in the home dock and drawer");
 assert(/html\.setting \.settings[\s\S]*?backdrop-filter: none !important/.test(css) && /html\.setting \.set-rows[\s\S]*?mask-image: none !important/.test(css),
@@ -147,7 +147,7 @@ const glassGlyphType = new Function("", sourceOf("glassGlyphType") + "; return g
   [{ name: "Downloader", package: "com.esaba.downloader" }, "downloader"],
   [{ name: "LocalSend", package: "org.localsend.localsend_app" }, "localsend"]
 ].forEach(([app, expected]) => assert.strictEqual(glassGlyphType(app), expected, app.name + " is recognized for a transparent glyph"));
-assert(/html\.theme-night \.app\.clear-always \.face[\s\S]*?background: linear-gradient\(145deg[\s\S]*?rgba\(18, 20, 28, 0\.76\) !important/.test(css),
+assert(/html\.theme-night \.app\.clear-always \.face[\s\S]*?background: linear-gradient\(145deg[\s\S]*?rgba\(18, 20, 28, 0\.84\) !important/.test(css),
   "the selected glyph apps keep the same dark glass tile backing as every other app");
 assert(/GLASS_ICONS \? "\.app \.face:not\(\.tool\):not\(\.word\) > img" : "\.app\.clear-always \.face > img"/.test(js),
   "the six selected apps are cut out even when the optional global glass-icon setting is off");

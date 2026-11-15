@@ -3081,6 +3081,17 @@
       showPhoto();
       return;
     }
+    if (zone === "grid") {
+      g = Math.max(0, Math.min(g, gridEls.length - 1));
+      if (gridEls[g]) { paintTileFocus(gridEls[g]); revealGridFocus(gridEls[g]); }
+      // The Night dock keeps its scene as-is while focus moves; don't touch hero/photo DOM on each key.
+      if (!expanded && !NIGHT) {
+        hero(null);
+        if ($("place").style.visibility !== "") $("place").style.visibility = "";
+        showPhoto();
+      }
+      return;
+    }
     if (zone === "shelf" && shelfEls[s]) {
       paintTileFocus(shelfEls[s]);
       scrollShelf();
@@ -3090,7 +3101,6 @@
         hero({ title: cc.title, app: cc.subtitle ? { name: cc.subtitle } : null });
         $("place").style.visibility = "hidden";
         showPhoto();
-        renderHint();
         return;
       }
       setBg(data.shows[s].backdrop || data.shows[s].poster, true);
@@ -3106,7 +3116,6 @@
         showPhoto();
       }
     }
-    renderHint();
   }
 
   function nearestInRow(row, x) {
