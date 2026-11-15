@@ -358,10 +358,9 @@ class FireWatch : AccessibilityService() {
             return if (runCatching { pm.getPackageInfo(AMAZON_HOME, 0) }.isSuccess && pm.resolveActivity(i, 0) != null) i else null
         }
 
-        /** Puts the watcher back on, only where a computer granted secure settings and the TV has a stock home. */
+        /** Puts the watcher back on, only where a computer granted secure settings. */
         fun ensure(c: Context) {
             if (c.checkSelfPermission("android.permission.WRITE_SECURE_SETTINGS") != PackageManager.PERMISSION_GRANTED) return
-            if (STOCK_HOMES.none { p -> runCatching { c.packageManager.getPackageInfo(p, 0) }.isSuccess }) return
             runCatching {
                 val cr = c.contentResolver
                 val me = "${c.packageName}/${FireWatch::class.java.name}"
