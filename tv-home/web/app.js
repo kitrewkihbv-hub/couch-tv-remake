@@ -2978,7 +2978,7 @@
   }
 
   // ---------------- focus ----------------
-  var paintedFocusEl = null, appFramePending = false;
+  var paintedFocusEl = null;
   // The lift and scale are fixed in app.css; read them once (and on resize) instead of asking for
   // the root's computed style on every D-pad press, which forces a style recalculation mid-navigation.
   var focusScale = 1.045, focusLiftPx = -0.375 * (innerWidth / 120), focusFontPx = innerWidth / 120;
@@ -2995,6 +2995,11 @@
     if (isFinite(scale) && scale > 0) focusScale = scale;
     if (isFinite(liftRem)) focusLiftPx = liftRem * focusFontPx;
   }
+  // Place the shared outline over the tile that is about to lift. This runs before the tile gets
+  // .focus, so the artwork's box is still its resting box: the outline's target is exact (resting
+  // centre, final scale and lift) and its transition starts in the same frame as the tile's. A
+  // requestAnimationFrame pass made the outline start one or two frames later, which is what made it
+  // look like it was chasing the icon instead of travelling with it.
   function placeAppFocusFrame(el) {
     var frame = $("app-focus-frame");
     if (!frame) return;
@@ -3002,41 +3007,19 @@
       frame.classList.remove("on");
       return;
     }
-    // Schedule at most one layout read per rendered frame. Rapid remote repeats update the
-    // selected tile immediately; the shared outline catches up to the latest tile once per frame.
-    if (appFramePending) return;
-    appFramePending = true;
-    var raf = window.requestAnimationFrame || function (cb) { return setTimeout(cb, 16); };
-    raf(function () {
-      appFramePending = false;
-      var current = paintedFocusEl;
-      if (!current || !current.classList || !current.classList.contains("app")) {
-        frame.classList.remove("on");
-        return;
-      }
-      var face = current.querySelector(".face");
-      if (!face) { frame.classList.remove("on"); return; }
-      var box = face.getBoundingClientRect();
-      var faceWidth = face.offsetWidth || box.width, faceHeight = face.offsetHeight || box.height;
-      var scale = focusScale, liftPx = focusLiftPx;
-      // The app is still part-way through its lift transition when this RAF runs. Use the
-      // transformed artwork center, subtract its current Y translation, then place the outline
-      // at the final lifted/scaled center instead of the old untransformed box.
-      var currentY = 0, transform = window.getComputedStyle ? window.getComputedStyle(current).transform : "";
-      if (!transform || transform === "none") { scale = 1; liftPx = 0; }
-      if (transform && transform.indexOf("matrix3d(") === 0) {
-        var m3 = transform.slice(9, -1).split(","); currentY = parseFloat(m3[13]) || 0;
-      } else if (transform && transform.indexOf("matrix(") === 0) {
-        var m2 = transform.slice(7, -1).split(","); currentY = parseFloat(m2[5]) || 0;
-      }
-      var width = Math.round(faceWidth * scale), height = Math.round(faceHeight * scale);
-      var left = box.left + box.width / 2 - width / 2;
-      var top = box.top + box.height / 2 - currentY + liftPx - height / 2;
-      if (frame.style.width !== width + "px") frame.style.width = width + "px";
-      if (frame.style.height !== height + "px") frame.style.height = height + "px";
-      frame.style.transform = "translate3d(" + Math.round(left) + "px," + Math.round(top) + "px,0)";
-      frame.classList.add("on");
-    });
+    var face = el.querySelector(".face");
+    if (!face) { frame.classList.remove("on"); return; }
+    var box = face.getBoundingClientRect();
+    // Already lifted (a resize, or the same tile still focused): its box is the finished outline.
+    var settled = el.classList.contains("focus");
+    var width = Math.round(settled ? box.width : (face.offsetWidth || box.width) * focusScale);
+    var height = Math.round(settled ? box.height : (face.offsetHeight || box.height) * focusScale);
+    var left = settled ? box.left : box.left + box.width / 2 - width / 2;
+    var top = settled ? box.top : box.top + box.height / 2 + focusLiftPx - height / 2;
+    if (frame.style.width !== width + "px") frame.style.width = width + "px";
+    if (frame.style.height !== height + "px") frame.style.height = height + "px";
+    frame.style.transform = "translate3d(" + Math.round(left) + "px," + Math.round(top) + "px,0)";
+    frame.classList.add("on");
   }
   function clearPaintedFocus() {
     if (paintedFocusEl) paintedFocusEl.classList.remove("focus");
@@ -3046,8 +3029,9 @@
   function paintTileFocus(el) {
     if (paintedFocusEl && paintedFocusEl !== el) paintedFocusEl.classList.remove("focus");
     paintedFocusEl = el || null;
-    if (el) el.classList.add("focus");
+    // Outline first, then the lift: both land in one style pass, so they animate together.
     placeAppFocusFrame(el);
+    if (el) el.classList.add("focus");
   }
   window.addEventListener("resize", function () { readFocusMetrics(); placeAppFocusFrame(paintedFocusEl); });
   function clearFocus() {
@@ -3073,6 +3057,9 @@
     else if (tile.bottom > box.bottom - edge) appsEl.scrollTop += tile.bottom - box.bottom + edge;
     lastRevealedGridRow = row;
     lastRevealScrollTop = appsEl.scrollTop;
+    // The drawer scrolled under the focused tile, so the outline is placed again from the new box
+    // instead of waiting for the next key press to catch up.
+    if (paintedFocusEl === el) placeAppFocusFrame(el);
   }
 
   function scrollShelf() {

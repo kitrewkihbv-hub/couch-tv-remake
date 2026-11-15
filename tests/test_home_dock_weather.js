@@ -96,8 +96,8 @@ assert(/async def get_weather_for\(lat, lon, place, timezone_name\)/.test(bridge
   "the bridge fetches weather for the location selected on the TV");
 assert(/function weatherNative\(\)/.test(js) && /TV\.weather\(String\(WXCFG\.lat\)/.test(js) && /window\.__tvWeatherDone/.test(js),
   "offline Android TVs can retrieve weather through the native network stack when WebView fetch fails");
-assert(/requestAnimationFrame/.test(sourceOf("placeAppFocusFrame")) && /clearFocus\(\)/.test(sourceOf("setIdleAmbient")) && /idle-ambient-active #apps-section[\s\S]*?display: none !important/.test(css),
-  "focus-frame work is coalesced and the dock selection is cleared in ambient mode");
+assert(/clearFocus\(\)/.test(sourceOf("setIdleAmbient")) && /idle-ambient-active #apps-section[\s\S]*?display: none !important/.test(css),
+  "the dock selection is cleared in ambient mode");
 assert(/html\.glass\.theme-night \.app\.focus \.face[\s\S]*?box-shadow: none !important/.test(css),
   "legacy glass focus styles cannot draw a second box around the active app");
 assert.strictEqual(config.weather.place, "Vancouver, Washington", "the packaged default weather location matches the user's city");
@@ -112,10 +112,14 @@ assert(/\.theme-night \.app\.tile\.focus \.face, \.theme-night \.app\.tile\.focu
   "focused app tiles do not run the expensive perpetual sway/glint animations");
 assert(/\.theme-night \.app\.focus \{ transform: translate3d\(0,var\(--app-focus-lift\),0\) scale\(var\(--app-focus-scale\)\); \}/.test(css) && /\.app-focus-frame\.on \{ opacity: 1; \}/.test(css),
   "app focus lifts the tile while a shared focus frame glides to the final transform");
-assert(/function placeAppFocusFrame\([\s\S]*?getBoundingClientRect\(\)[\s\S]*?currentY[\s\S]*?liftPx/.test(js),
-  "the focus frame accounts for the app's lift so its center stays over the icon");
-assert(/if \(appFramePending\) return;[\s\S]*?appFramePending = true;[\s\S]*?var current = paintedFocusEl;/.test(sourceOf("placeAppFocusFrame")),
-  "rapid D-pad repeats share one pending focus-frame layout read and follow the latest tile");
+assert(/function placeAppFocusFrame\([\s\S]*?getBoundingClientRect\(\)[\s\S]*?focusLiftPx[\s\S]*?height \/ 2/.test(js),
+  "the outline's resting-box centre is lifted by the same amount as the tile, so it stays over the icon");
+assert(/function paintTileFocus\(el\) \{[\s\S]*?placeAppFocusFrame\(el\);\n    if \(el\) el\.classList\.add\("focus"\);/.test(js),
+  "the outline is measured and moved before the tile lifts, so both transitions start in the same frame");
+assert(!/requestAnimationFrame\(/.test(sourceOf("placeAppFocusFrame")) && /var settled = el\.classList\.contains\("focus"\)/.test(sourceOf("placeAppFocusFrame")),
+  "the outline is placed from the tile's resting box in the same frame and re-measured only when it is already lifted");
+assert(/if \(paintedFocusEl === el\) placeAppFocusFrame\(el\);/.test(js),
+  "the app drawer re-places the outline after scrolling the focused row into view");
 assert(/\.theme-night\.expanded \.app \.label \{[\s\S]*?opacity: 1[\s\S]*?white-space: normal/.test(css) && /grid-auto-rows: 10rem/.test(css),
   "app names are wrapped inside their own app-drawer tile rows");
 assert(/background: rgba\(20, 22, 30, 0\.78\)/.test(css) && /Every Night-look app gets its own dark frosted tile/.test(css) && /backdrop-filter: none !important/.test(css),
@@ -133,8 +137,8 @@ assert(/will-change: transform; backface-visibility: hidden/.test(css) && !css.i
   "every dock tile keeps one promoted layer, so moving focus does not build and tear down a layer per press");
 assert(/\.glass-icons \.app \.face img \{ transition: opacity 0\.2s; \}/.test(css),
   "focus changes do not animate the icon's grayscale filter, which re-rasterised every frame of the lift");
-assert(/function readFocusMetrics\(\)/.test(js) && /var scale = focusScale, liftPx = focusLiftPx;/.test(js),
-  "the focus outline's scale and lift are read once rather than recomputing root style on every key press");
+assert(/function readFocusMetrics\(\)/.test(js) && /\* focusScale\)/.test(js) && /\+ focusLiftPx - height \/ 2/.test(js) && !/getComputedStyle\(document\.documentElement\)[\s\S]{0,200}?placeAppFocusFrame/.test(js),
+  "the outline's scale and lift are read once rather than from the root's computed style on every key press");
 assert(/WEATHER_RETRY_STEPS[\s\S]*?scheduleWeatherRetry\(\)/.test(js) && /function scheduleWeatherRetry\(\)[\s\S]*?refreshWeather\(\)/.test(js),
   "a failed weather reading is retried within seconds instead of waiting for the half-hourly refresh");
 const validPlace = new Function("isFinite", sourceOf("validPlace") + "; return validPlace;")(isFinite);
