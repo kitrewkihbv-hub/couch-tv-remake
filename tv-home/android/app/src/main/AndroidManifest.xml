@@ -146,7 +146,7 @@
              forward and reads no screen content. -->
         <service
             android:name=".FireWatch"
-            android:exported="false"
+            android:exported="true"
             android:label="Home button watch"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
@@ -158,7 +158,7 @@
              person at the TV switches it on in Accessibility; it catches only that button and reads no screen content. -->
         <service
             android:name=".KeyWatch"
-            android:exported="false"
+            android:exported="true"
             android:label="Home gear button"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
