@@ -99,12 +99,15 @@ class FireWatch : AccessibilityService() {
         // never seen (issue #44: Amazon's home sat on screen about 30 s at boot). The service has no
         // permission to read windows (that would be reading the screen), so it goes by the clock
         // instead: bound in the first minutes after a restart, nothing but the TV's own home can be
-        // in front, so couch-tv goes on top once. Fire OS, and TCL Google TVs (issue #94): TCL's own
-        // boot controller opens the Google home at power on before this service is bound, so its
-        // window event is never seen, and a Home press then changes nothing (the Google home is
-        // already in front). Other Google TVs are left alone: one can start on an HDMI input or
-        // live TV, and that must never be covered.
-        if ((android.os.Build.MANUFACTURER.equals("Amazon", ignoreCase = true) || TclPlaceholderInput.isTcl()) &&
+        // in front, so couch-tv goes on top once. Fire OS, TCL and Onn 4K Pro (Walmart) Google TVs (issue #94): their
+        // boot controllers open Google's home before the service is bound. When hijack is on we also
+        // bring couch-tv forward at boot, so the 30s flash becomes ~1s. Other Google TVs are still left
+        // alone when hijack is off so HDMI/live TV at boot is not covered.
+        val isOnn = android.os.Build.MANUFACTURER.equals("onn", ignoreCase = true) ||
+            android.os.Build.MANUFACTURER.equals("walmart", ignoreCase = true) ||
+            android.os.Build.BRAND.equals("onn", ignoreCase = true)
+        if (((android.os.Build.MANUFACTURER.equals("Amazon", ignoreCase = true) || TclPlaceholderInput.isTcl() || isOnn) ||
+            isHijackEnabled(this)) &&
             SystemClock.elapsedRealtime() < BOOT_WINDOW_MS && !CrashGuard.standingAside(this)) {
             Log.i("couchtv.firewatch", "bound just after a restart: putting couch-tv in front")
             runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
