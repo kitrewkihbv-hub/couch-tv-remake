@@ -53,8 +53,18 @@ CONFIG, LOADED_FROM = _load()
 
 TVS = CONFIG["tvs"]
 DEFAULT_TV = CONFIG.get("default_tv") or TVS[0]["id"]
+# Weather location: a config.json with only a place name and no coordinates previously
+# produced latitude=undefined → "Weather unavailable" until a place was chosen. Only
+# accept the config's weather when its coordinates are valid, otherwise keep the
+# packaged fallback so the pill has a real reading on first boot.
+_raw_weather = CONFIG.get("weather") or {}
+try:
+    _lat, _lon = float(_raw_weather.get("lat")), float(_raw_weather.get("lon"))
+    _coords_valid = _lat is not None and _lon is not None and -90 <= _lat <= 90 and -180 <= _lon <= 180
+except (TypeError, ValueError):
+    _coords_valid = False
 WEATHER = {"lat": 45.6387, "lon": -122.6615, "place": "Vancouver, Washington", "timezone": "America/Los_Angeles",
-           **(CONFIG.get("weather") or {})}
+           **(_raw_weather if _coords_valid else {})}
 SCREENS = CONFIG.get("screens") or []
 BRIDGE = {"host": "your-computer.local", "port": 5400, "fallback_hosts": [], **(CONFIG.get("bridge") or {})}
 PAIRING_KEY = str(BRIDGE.get("pairing_key") or os.environ.get("BRIDGE_KEY") or "").strip()

@@ -3688,6 +3688,8 @@
         WXCFG = validPlace(CFG.weather) || WX_DEFAULT;
         saveSettings();
         SET.msg = t("loc_set", { place: WXCFG.place || "" });
+        data.weather = null;
+        refreshWeather();
       } });
     }
     rows.push(info("loc-note", t("loc_note")));

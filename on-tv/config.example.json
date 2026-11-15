@@ -6,7 +6,7 @@
     { "id": "person2", "name": "Person 2" }
   ],
   "weather": { "lat": 45.6387, "lon": -122.6615, "place": "Vancouver, Washington", "timezone": "America/Los_Angeles" },
-  "country": "AU",
+  "country": "US",
   "ask_enabled": false,
   "ask_key": ""
 }
