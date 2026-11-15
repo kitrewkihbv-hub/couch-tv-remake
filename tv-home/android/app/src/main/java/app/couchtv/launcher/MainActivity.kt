@@ -199,6 +199,16 @@ class MainActivity : Activity() {
         js("window.tv && tv.pause && tv.pause()")   // the video background stops while an app is in front
     }
 
+    override fun onBackPressed() {
+        // Back closes menu/drawer/dialog via web if one is open, otherwise does nothing on root home (never finishes activity)
+        if (pageReady) {
+            js("window.tv && tv.back()")
+            return
+        }
+        // fallback grid still visible while page loads: keep TV usable
+        super.onBackPressed()
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         // Every kind of remote: game controller A, Select and the number pad's Enter count as OK,
         // controller B and Escape as BACK. The page then only has to know OK and BACK.
@@ -707,6 +717,12 @@ class MainActivity : Activity() {
         fun isHijackServiceEnabled(): Boolean = FireWatch.connected
 
         @JavascriptInterface
+        fun openSystemSettings(): Boolean = try {
+            startActivity(Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            true
+        } catch (_: Exception) { false }
+
+        @JavascriptInterface
         fun openAccessibilitySettings(): Boolean = try {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             true
@@ -1161,10 +1177,12 @@ class MainActivity : Activity() {
 
     private fun appList(): List<Pair<ResolveInfo, String>> = appCache ?: synchronized(this) {
         appCache ?: run {
-            val q = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
+            val lean = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
+            val normal = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
             val store = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage("com.amazon.venezia")
-            (packageManager.queryIntentActivities(q, 0) + packageManager.queryIntentActivities(store, 0))
-                .filter { it.activityInfo.packageName != packageName }
+            // Query both LEANBACK and LAUNCHER so sideloaded phone apps also appear, deduplicate by package, exclude ourselves
+            val all = packageManager.queryIntentActivities(lean, 0) + packageManager.queryIntentActivities(normal, 0) + packageManager.queryIntentActivities(store, 0)
+            all.filter { it.activityInfo.packageName != packageName }
                 .distinctBy { it.activityInfo.packageName }
                 .map { it to it.loadLabel(packageManager).toString() }
                 .sortedBy { it.second.lowercase() }
