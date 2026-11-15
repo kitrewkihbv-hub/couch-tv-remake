@@ -120,7 +120,7 @@ def finder_patch(server):
             return {"title": title, "poster": "p-" + title, "backdrop": "b-" + title, "year": 2020, "type": "show"}, []
         return None, []
 
-    async def resolve_episode(title, subtitle):
+    async def resolve_episode(title, subtitle, year_subtitle=False):
         se = EPISODES.get((title, subtitle))
         return {"show": title, "season": se[0], "episode": se[1], "episode_title": subtitle} if se else {}
     return find, resolve_episode
