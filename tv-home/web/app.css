@@ -435,6 +435,7 @@ html.still .tile.focus .face, html.still .tile.focus .face::after { animation: n
    otherwise Chrome builds a layer when the outline arrives and tears the last one down, and that
    first raster of the freshly focused icon is what makes D-pad repeats stutter on a TV GPU. */
 .theme-night .app.tile { transition: transform 140ms cubic-bezier(.16,1,.3,1); will-change: transform; backface-visibility: hidden; }
+html.navigating .theme-night .app.tile { transition-duration: 120ms; }
 /* Lighter home is for the boxes that cannot afford a layer per icon: keep one promoted tile there. */
 html.lighter.theme-night .app.tile { will-change: auto; }
 html.lighter.theme-night .app.focus { will-change: transform; }
@@ -451,6 +452,9 @@ html.lighter.theme-night .app.focus { will-change: transform; }
   transform: translate3d(-200px,-200px,0); transition: transform 140ms cubic-bezier(.16,1,.3,1), opacity 70ms ease-out;
   will-change: transform; contain: strict;
 }
+/* Pause the big photo drift while D-pad is moving - frees the Onn Mali GPU for the focus lift */
+html.navigating .bg img.on { animation-play-state: paused !important; }
+html.navigating .tile.focus .face, html.navigating .tile.focus .face::after { animation-play-state: paused !important; }
 .app-focus-frame.on { opacity: 1; }
 @media (prefers-reduced-motion: reduce) {
   .theme-night .app.tile, .app-focus-frame { transition: none !important; }

@@ -5028,9 +5028,16 @@
     });
   }
 
+  var navTimer = null;
+  function setNavigating() {
+    document.documentElement.classList.add("navigating");
+    clearTimeout(navTimer);
+    navTimer = setTimeout(function(){ document.documentElement.classList.remove("navigating"); }, 320);
+  }
   document.addEventListener("keydown", function (e) {
     lastKeyAt = Date.now();
     resetSmartIdle();
+    if (arrowOf(e) || isBack(e) || isSettings(e)) setNavigating();
     if (screenOffActive) {
       e.preventDefault();
       e.stopPropagation();
