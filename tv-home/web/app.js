@@ -4363,7 +4363,11 @@
     var run = ALONE ? "run_alone" : OFFLINE ? "run_off" : data.bridge === false ? "run_quiet" : "run_bridge";
     var hs = homeState(), homeRows = [];
     if (hs === "ask") homeRows.push({ kind: "action", key: "make-home", label: t("home_row"), sub: t("home_row_sub"), act: requestHome });
-    else if (hs === "google_tv") homeRows.push(info("make-home", t("home_row"), "", t("home_google_tv")));
+    else if (hs === "google_tv") {
+      homeRows.push(info("make-home", t("home_row"), "", t("home_google_tv")));
+      // Still let Onn/Google TV pick couch-tv via system chooser - it will be on the Home launcher list now that we request RoleManager
+      homeRows.push({ kind: "action", key: "make-home-again", label: t("home_row"), sub: t("home_row_sub"), act: requestHome });
+    }
     // Projectivy-style hijack: toggle that keeps couch-tv in front, accessibility-based, safe (Leaves Settings + Free TV alone)
     var hijackOn = false;
     try { hijackOn = TV && TV.hijackEnabled ? !!TV.hijackEnabled() : !!(ST.hijack || ST.hijack_enabled); } catch (e) {}
