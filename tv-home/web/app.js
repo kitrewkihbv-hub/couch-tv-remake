@@ -4258,10 +4258,15 @@
       rows: function () {
         var p = personById(id);
         if (!p) return [];
+        var hasAvatar = typeof p.avatar === "string" && /^https?:\/\/[^\s<>"']{1,500}$/i.test(p.avatar);
         return [
           { kind: "input", key: "p-name", label: t("person_name"), value: p.name, act: function () {
             startTyping({ label: t("person_rename_type"), value: p.name, submit: function (v) { renamePerson(id, v); } });
           } },
+          { kind: "input", key: "p-avatar", label: t("person_avatar") || "Profile photo", value: hasAvatar ? p.avatar : "", sub: hasAvatar ? "" : (t("person_avatar_sub") || "https:// link to a square photo"), act: function () {
+            startTyping({ label: t("person_avatar_type") || "Paste a https:// link to a photo, then OK", value: p.avatar || "", submit: function (v) { setPersonAvatar(id, v); } });
+          } },
+          ...(hasAvatar ? [{ kind: "action", key: "p-avatar-clear", label: t("person_avatar_clear") || "Remove photo", act: function () { setPersonAvatar(id, ""); } }] : []),
           { kind: "action", key: "p-remove", label: t("person_remove", { name: p.name }), danger: true, act: function () { removePerson(id); } }
         ];
       } };
@@ -4281,7 +4286,7 @@
   function savePeopleList() {
     var list = NOBODY ? [] : PEOPLE.map(function (p) {
       var o = { id: p.id, name: p.name };
-      ["colour", "kid", "guest"].forEach(function (k) { if (p[k] != null) o[k] = p[k]; });
+      ["colour", "kid", "guest", "avatar"].forEach(function (k) { if (p[k] != null) o[k] = p[k]; });
       return o;
     });
     keep("tvhome.people.list", { people: list, pending: true });
@@ -4307,6 +4312,16 @@
     if (!name || !p) return;
     p.name = name;
     savePeopleList();
+  }
+  function setPersonAvatar(id, v) {
+    var p = personById(id);
+    if (!p) return;
+    v = String(v || "").trim();
+    if (!v) { delete p.avatar; savePeopleList(); SET.keyFocus = "p-avatar"; return; }
+    if (!/^https?:\/\/[^\s<>"']{1,500}$/i.test(v)) { SET.msg = t("person_avatar_bad") || "That link did not look like a https:// photo link."; return; }
+    p.avatar = v;
+    savePeopleList();
+    SET.keyFocus = "p-avatar";
   }
   function removePerson(id) {
     if (NOBODY) return;

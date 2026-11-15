@@ -657,6 +657,7 @@ html.navigating .tile.focus .face, html.navigating .tile.focus .face::after { an
 .set-side { display: flex; flex-direction: column; min-height: 0; }
 .set-title { margin: 2.25rem 0 2.5rem 1.25rem; font-size: 2.875rem; line-height: 3.75rem; font-weight: 700; letter-spacing: -0.022em; white-space: nowrap; }
 .set-secs { display: flex; flex-direction: column; gap: 0.375rem; }
+.ssec span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .ssec {
   display: flex; align-items: center; gap: 1.25rem; min-height: 4.75rem; padding: 0.5rem 1.5rem 0.5rem 0.875rem; border-radius: 1.5rem;
   font-size: 1.75rem; line-height: 2.25rem; font-weight: 600; color: rgba(255, 255, 255, 0.76);
