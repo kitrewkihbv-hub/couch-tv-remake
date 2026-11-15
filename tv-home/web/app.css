@@ -811,7 +811,7 @@ html.still .tile.focus .face, html.still .tile.focus .face::after { animation: n
   --glass-blur: blur(2.25rem) saturate(185%) brightness(1.06);
 }
 .glass.theme-night .people:not(.focus), .glass.theme-night .qbtn:not(.focus), .glass.theme-night .grid,
-.glass.theme-night .ncard:not(.focus), .glass.theme-night .date .dline,
+.glass.theme-night .ncard:not(.focus),
 .glass:not(.theme-night) .clock, .glass:not(.theme-night) .people, .glass:not(.theme-night) .qbtn:not(.focus),
 .glass:not(.theme-night) .app .face.tool, .glass:not(.theme-night) .app .face.word {
   background: var(--glass-tint); box-shadow: var(--glass-edge);
@@ -819,8 +819,6 @@ html.still .tile.focus .face, html.still .tile.focus .face::after { animation: n
 }
 /* a focused card keeps its white ring, on glass */
 .glass.theme-night .ncard.focus { background: var(--glass-tint); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
-/* Night: the date line becomes a small glass pill above the clock */
-.glass.theme-night .date .dline { display: inline-block; padding: 0.375rem 1.5rem; border-radius: 1.75rem; }
 /* Classic: a glass card behind the clock (the words stay where they were), a light edge on every tile */
 .glass:not(.theme-night) .clock { padding: 1.25rem 1.75rem 0.75rem 2.5rem; margin: -1.25rem -1.75rem 0 0; border-radius: 2.25rem; }
 .glass:not(.theme-night) .tile:not(.focus) .face { box-shadow: 0 0 0 0.0625rem rgba(255, 255, 255, 0.24), 0 0.75rem 1.75rem rgba(0, 0, 0, 0.35); }
@@ -829,7 +827,6 @@ html.still .tile.focus .face, html.still .tile.focus .face::after { animation: n
 .glass.glass-lite.theme-night .qbtn:not(.focus),
 .glass.glass-lite.theme-night .grid,
 .glass.glass-lite.theme-night .ncard,
-.glass.glass-lite.theme-night .date .dline,
 .glass.glass-lite:not(.theme-night) .clock,
 .glass.glass-lite:not(.theme-night) .people,
 .glass.glass-lite:not(.theme-night) .qbtn:not(.focus),
@@ -842,7 +839,6 @@ html.still .tile.focus .face, html.still .tile.focus .face::after { animation: n
 .glass.theme-night .qbtn:not(.focus),
 .glass.theme-night .grid,
 .glass.theme-night .ncard,
-.glass.theme-night .date .dline,
 .glass:not(.theme-night) .clock,
 .glass:not(.theme-night) .people,
 .glass:not(.theme-night) .qbtn:not(.focus),

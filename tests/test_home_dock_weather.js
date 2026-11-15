@@ -129,6 +129,8 @@ assert(/html\.setting \.settings[\s\S]*?backdrop-filter: none !important/.test(c
   "settings avoids the full-screen blur and scrolling mask that cost GPU time");
 assert(js.includes("Keep date and weather in separate, stable regions") && js.includes('$("date").innerHTML = \'<span class="dline">\' + esc(day) + "</span>";'),
   "the main date has no duplicate weather reading beside it");
+assert(!css.includes(".date .dline") && !css.includes("date line becomes a small glass pill"),
+  "the date is plain text, not enclosed in the legacy glass pill");
 assert(/avatar-art/.test(sourceOf("avatarHTML")) && /avatar-photo/.test(sourceOf("avatarHTML")),
   "people receive a portrait fallback and optional real profile image");
 const makeAvatarHTML = new Function("esc", "colourOf", sourceOf("avatarHTML") + "; return avatarHTML;")(String, p => p.colour);
