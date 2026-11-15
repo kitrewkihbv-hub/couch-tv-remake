@@ -2939,22 +2939,28 @@
   }
 
   // ---------------- focus ----------------
-  var paintedFocusEl = null, appFrameRequest = 0;
+  var paintedFocusEl = null, appFramePending = false;
   function placeAppFocusFrame(el) {
     var frame = $("app-focus-frame");
     if (!frame) return;
-    var request = ++appFrameRequest;
     if (!NIGHT || !el || !el.classList || !el.classList.contains("app")) {
       frame.classList.remove("on");
       return;
     }
-    var face = el.querySelector(".face");
-    if (!face) { frame.classList.remove("on"); return; }
-    // Coalesce repeated remote key events into one layout read per rendered frame. The outline
-    // itself only animates its compositor-friendly transform between the latest focus targets.
+    // Schedule at most one layout read per rendered frame. Rapid remote repeats update the
+    // selected tile immediately; the shared outline catches up to the latest tile once per frame.
+    if (appFramePending) return;
+    appFramePending = true;
     var raf = window.requestAnimationFrame || function (cb) { return setTimeout(cb, 16); };
     raf(function () {
-      if (request !== appFrameRequest || paintedFocusEl !== el) return;
+      appFramePending = false;
+      var current = paintedFocusEl;
+      if (!current || !current.classList || !current.classList.contains("app")) {
+        frame.classList.remove("on");
+        return;
+      }
+      var face = current.querySelector(".face");
+      if (!face) { frame.classList.remove("on"); return; }
       var box = face.getBoundingClientRect();
       var faceWidth = face.offsetWidth || box.width, faceHeight = face.offsetHeight || box.height;
       var rootStyle = window.getComputedStyle ? window.getComputedStyle(document.documentElement) : null;
@@ -2966,7 +2972,7 @@
       // The app is still part-way through its lift transition when this RAF runs. Use the
       // transformed artwork center, subtract its current Y translation, then place the outline
       // at the final lifted/scaled center instead of the old untransformed box.
-      var currentY = 0, transform = rootStyle && window.getComputedStyle(el).transform;
+      var currentY = 0, transform = rootStyle && window.getComputedStyle(current).transform;
       if (!transform || transform === "none") { scale = 1; liftPx = 0; }
       if (transform && transform.indexOf("matrix3d(") === 0) {
         var m3 = transform.slice(9, -1).split(","); currentY = parseFloat(m3[13]) || 0;

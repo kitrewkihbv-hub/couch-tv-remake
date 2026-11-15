@@ -110,6 +110,8 @@ assert(/\.theme-night \.app\.focus \{ transform: translate3d\(0,var\(--app-focus
   "app focus lifts the tile while a shared focus frame glides to the final transform");
 assert(/function placeAppFocusFrame\([\s\S]*?getBoundingClientRect\(\)[\s\S]*?currentY[\s\S]*?liftPx/.test(js),
   "the focus frame accounts for the app's lift so its center stays over the icon");
+assert(/if \(appFramePending\) return;[\s\S]*?appFramePending = true;[\s\S]*?var current = paintedFocusEl;/.test(sourceOf("placeAppFocusFrame")),
+  "rapid D-pad repeats share one pending focus-frame layout read and follow the latest tile");
 assert(/\.theme-night\.expanded \.app \.label \{[\s\S]*?opacity: 1[\s\S]*?white-space: normal/.test(css) && /grid-auto-rows: 10rem/.test(css),
   "app names are wrapped inside their own app-drawer tile rows");
 assert(/background: rgba\(20, 22, 30, 0\.78\)/.test(css) && /Every Night-look app gets its own dark frosted tile/.test(css) && /backdrop-filter: none !important/.test(css),
