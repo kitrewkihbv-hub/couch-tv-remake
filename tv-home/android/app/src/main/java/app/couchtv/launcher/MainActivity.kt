@@ -728,6 +728,43 @@ class MainActivity : Activity() {
             true
         } catch (_: Exception) { false }
 
+        // Projectivy-style display zoom: Amlogic screen position (Onn 4K Pro) which persists after uninstall
+        @JavascriptInterface
+        fun openAmlogicDisplay(): Boolean {
+            val tries = listOf(
+                android.content.ComponentName("com.droidlogic.tv.settings", "com.droidlogic.tv.settings.more.MorePrefFragmentActivity"),
+                android.content.ComponentName("com.droidlogic.tv.settings", "com.droidlogic.tv.settings.MainActivity"),
+                android.content.ComponentName("com.android.tv.settings", "com.android.tv.settings.MainSettings")
+            )
+            for (cn in tries) {
+                try {
+                    startActivity(Intent().setComponent(cn).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    return true
+                } catch (_: Exception) {}
+            }
+            return try {
+                startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                true
+            } catch (_: Exception) { false }
+        }
+
+        @JavascriptInterface
+        fun setOverscan(step: Int): Boolean = try {
+            // step: positive = zoom in (shrink visible area), negative = zoom out
+            // Uses wm overscan which persists after uninstall (like Projectivy). Requires shell.
+            // We use sh -c to allow wm command even without direct exec path.
+            val inset = step * 10 // 10px per step, matches Amlogic ~2% per step
+            val cmd = if (inset == 0) "wm overscan reset" else "wm overscan $inset,$inset,$inset,$inset"
+            val p = Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd))
+            p.waitFor() == 0
+        } catch (_: Exception) { false }
+
+        @JavascriptInterface
+        fun resetOverscan(): Boolean = try {
+            val p = Runtime.getRuntime().exec(arrayOf("sh", "-c", "wm overscan reset"))
+            p.waitFor() == 0
+        } catch (_: Exception) { false }
+
         /** Android's Watch Next list (what each app says you are in the middle of), as JSON. */
         @JavascriptInterface
         fun watchNext(): String = readWatchNext().toString()

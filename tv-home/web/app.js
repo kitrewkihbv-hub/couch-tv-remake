@@ -3880,6 +3880,25 @@
       rows.push({ kind: "choice", key: "look:" + id, label: t("look_" + id), sub: t("look_" + id + "_sub"), checked: look === id,
         act: function () { ST.look = id; keep("tvhome.look", id); saveSettings(); } });
     });
+    // Projectivy-style display zoom (Amlogic screen position, persists after uninstall)
+    rows.push(head(t("display_head") || "Display"));
+    rows.push({ kind: "action", key: "display-pos", label: t("display_pos") || "Screen position", sub: t("display_pos_sub") || "Zoom in / out - opens Amlogic display settings (like Projectivy, stays after uninstall)", act: function () {
+      try { if (TV && TV.openAmlogicDisplay) { if (TV.openAmlogicDisplay()) return; } } catch (e) {}
+      // fallback to generic display settings
+      try { if (TV && TV.openSystemSettings) TV.openSystemSettings(); } catch (e) {}
+    } });
+    rows.push({ kind: "action", key: "zoom-in", label: t("zoom_in") || "Zoom in", sub: t("zoom_in_sub") || "Shrink picture (fix overscan)", act: function () {
+      try { if (TV && TV.setOverscan) { TV.setOverscan(2); SET.msg = t("zoom_done") || "Zoomed in - use Zoom out or Reset to undo"; } } catch (e) {}
+      renderSettings();
+    } });
+    rows.push({ kind: "action", key: "zoom-out", label: t("zoom_out") || "Zoom out", sub: t("zoom_out_sub") || "Enlarge picture", act: function () {
+      try { if (TV && TV.setOverscan) { TV.setOverscan(-2); SET.msg = t("zoom_done") || "Zoomed out - use Zoom in or Reset to undo"; } } catch (e) {}
+      renderSettings();
+    } });
+    rows.push({ kind: "action", key: "zoom-reset", label: t("zoom_reset") || "Reset zoom", sub: t("zoom_reset_sub") || "Back to default", act: function () {
+      try { if (TV && TV.resetOverscan) { TV.resetOverscan(); SET.msg = t("zoom_reset_done") || "Zoom reset"; } } catch (e) {}
+      renderSettings();
+    } });
     if (look === "classic") {
       rows.push({ kind: "toggle", key: "keep-photo", label: t("keep_photo"), sub: t("keep_photo_sub"), value: KEEP_PHOTO ? t("on") : t("off"), act: function () {
         KEEP_PHOTO = !KEEP_PHOTO; ST.keep_photo = KEEP_PHOTO;
