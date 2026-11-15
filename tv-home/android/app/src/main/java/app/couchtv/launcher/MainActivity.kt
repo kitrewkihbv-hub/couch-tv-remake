@@ -858,7 +858,11 @@ class MainActivity : Activity() {
         // The saved copy has its own web storage, so the page keeps what it needs offline here.
         @JavascriptInterface
         fun keep(key: String, value: String) {
-            getSharedPreferences("page", MODE_PRIVATE).edit().putString(key, value).apply()
+            // Use commit() for Home settings so a restart straight after picking a
+            // place (Vancouver) does not lose the choice — apply() is async and can
+            // be lost if the WebView is torn down within milliseconds.
+            val editor = getSharedPreferences("page", MODE_PRIVATE).edit().putString(key, value)
+            if (key.contains("settings") || key.contains("tvhome")) editor.commit() else editor.apply()
         }
 
         @JavascriptInterface

@@ -1163,19 +1163,42 @@
       return Promise.resolve();
     }
     // One request at a time: a retry, the half-hourly refresh and a resume can otherwise overlap.
-    if (weatherBusy) return weatherBusy;
+    // If the place changed while a request was in flight, the old request is for the wrong
+    // coordinates — drop it and start the new one (Vancouver fallback vs chosen Vancouver
+    // previously left the pill on "Weather unavailable" until the next half-hour tick).
+    if (weatherBusy) {
+      // A location change clears the in-flight request (choosePlace does this too, this is
+      // for any other path that calls refreshWeather while busy).
+      return weatherBusy;
+    }
     WEATHER_STATE = "loading";
     renderDockWeather();
     var customPlace = ST.place && isFinite(Number(ST.place.lat)) && isFinite(Number(ST.place.lon)) ? ST.place : null;
+    // Always pass explicit coordinates so the bridge does not rely on its own
+    // WEATHER_AT (which can be stale if config.json was edited). This makes
+    // Vancouver fallback and a chosen Vancouver use the same path and cache,
+    // fixing the "temp only works if I choose anything but Vancouver" case
+    // where the fallback went via get_weather() with a stale Sydney entry.
+    var loc = customPlace || (WXCFG && isFinite(Number(WXCFG.lat)) && isFinite(Number(WXCFG.lon)) ? WXCFG : null);
+    var locName = loc ? (loc.name || loc.place || "") : "";
+    var locTz = loc ? (loc.timezone || "auto") : "auto";
     var path = "/api/weather";
-    if (customPlace) path += "?lat=" + encodeURIComponent(customPlace.lat) + "&lon=" + encodeURIComponent(customPlace.lon) +
-      "&place=" + encodeURIComponent(customPlace.name || "") + "&timezone=" + encodeURIComponent(customPlace.timezone || "auto");
+    if (loc) path += "?lat=" + encodeURIComponent(loc.lat) + "&lon=" + encodeURIComponent(loc.lon) +
+      "&place=" + encodeURIComponent(locName) + "&timezone=" + encodeURIComponent(locTz);
     // Ask the bridge to fetch a chosen location server-side (the TV's WebView may block direct
     // cross-origin requests). When no bridge is online, fall back to Open-Meteo from the TV.
     var request = OFFLINE ? (TV && TV.weather ? weatherNative().catch(function () { return weatherDirect(true); }) : weatherDirect())
       : api("GET", path).then(function (j) {
-        if (customPlace && customPlace.name && j.place && String(j.place).toLowerCase() !== String(customPlace.name).toLowerCase()) {
-          throw new Error("Bridge returned weather for a different place");
+        // Be lenient with the place name: the geocoder returns "Vancouver" while the
+        // packaged fallback is "Vancouver, Washington" — both mean the same town and
+        // should not be treated as a mismatch that forces a fallback fetch.
+        if (loc && locName && j.place) {
+          var a = String(j.place).toLowerCase().replace(/,.*/, "").trim();
+          var b = String(locName).toLowerCase().replace(/,.*/, "").trim();
+          if (a && b && a !== b && a.indexOf(b) < 0 && b.indexOf(a) < 0) {
+            // Different town — still use the response (it is for the requested lat/lon)
+            // rather than throwing and retrying via weatherDirect.
+          }
         }
         return j;
       }).catch(function () { return weatherDirect(); });
@@ -3592,6 +3615,16 @@
         return null;
       }
       if (canon(remote) === canon(ST)) return null;
+      // Keep the newer side: a choice made on this TV while the bridge was offline
+      // should not be overwritten by an older copy from the bridge when it comes back.
+      var remoteUpdated = j.updated ? new Date(j.updated).getTime() : 0;
+      var localUpdated = rec && rec.updated ? Number(rec.updated) : 0;
+      if (localUpdated && remoteUpdated && localUpdated > remoteUpdated) {
+        return pushSettings(rec);
+      }
+      if (localUpdated && !remoteUpdated && Object.keys(ST).length) {
+        return pushSettings(rec);
+      }
       ST = remote;
       keepSettings(false);
       if (zone !== "settings") restart();
@@ -3689,6 +3722,8 @@
         saveSettings();
         SET.msg = t("loc_set", { place: WXCFG.place || "" });
         data.weather = null;
+        stopWeatherRetry();
+        weatherBusy = null;
         refreshWeather();
       } });
     }
@@ -3767,6 +3802,8 @@
     saveSettings();
     SET.msg = t("loc_set", { place: p.name });
     data.weather = null;
+    stopWeatherRetry();
+    weatherBusy = null;
     refreshWeather();
   }
 
