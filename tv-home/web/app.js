@@ -280,6 +280,7 @@
     person: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20.5c.8-3.9 3.7-6 7.5-6s6.7 2.1 7.5 6"/></svg>',
     bolt: '<svg viewBox="0 0 24 24"><path d="M13 2.8 5.5 13.2h5.8L10.5 21l8-10.6h-5.9z"/></svg>',
     info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.6v.2"/></svg>',
+    shield: '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.4-2.9 8.6-7 10-4.1-1.4-7-5.6-7-10V6l7-3z"/></svg>',
     download: '<svg viewBox="0 0 24 24"><path d="M12 3.5v11M7.5 10l4.5 4.5 4.5-4.5"/><path d="M4.5 16v2.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V16"/></svg>'
   };
   // weather glyphs for the date line, by Open-Meteo's WMO code
@@ -3602,7 +3603,7 @@
   // also on the computer (/api/settings), so the phone and the TV agree.
   var ST_KEY = "tvhome.settings";
   var SECS = [["language", "globe"], ["location", "pin"], ["weather", "cloud"], ["look", "look"],
-    ["apps", "apps"], ["people", "person"], ["quick", "bolt"], ["about", "info"]];
+    ["apps", "apps"], ["people", "person"], ["quick", "bolt"], ["hijack", "shield"], ["about", "info"]];
   var SET = { col: "secs", sec: 0, ri: 0, keyFocus: null, sub: null, lift: null, confirm: null, dirty: false, typing: null,
     msg: "", geo: { q: "", list: null, busy: false, err: false } };
   var REPO_URL = "github.com/Seagey/couch-tv";
@@ -3713,6 +3714,7 @@
     if (id === "apps") return appsRows();
     if (id === "people") return peopleRows();
     if (id === "quick") return quickRows();
+    if (id === "hijack") return hijackRows();
     return aboutRows();
   }
 
@@ -4354,6 +4356,47 @@
     if (i < 0 || j < 0 || j >= l.length) return;
     l[i] = l[j]; l[j] = q;
     setQuick(l);
+  }
+
+  // ---- hijack launcher (Projectivy-style) - own section so it's visible, not hidden in About ----
+  function hijackRows() {
+    var hijackOn = false;
+    try { hijackOn = TV && TV.hijackEnabled ? !!TV.hijackEnabled() : !!(ST.hijack || ST.hijack_enabled); } catch (e) {}
+    var rows = [];
+    rows.push(head(t("hijack_head") || "Launcher"));
+    rows.push({ kind: "toggle", key: "hijack", label: t("hijack_title"), sub: t("hijack_sub"), value: hijackOn ? t("on") : t("off"), act: function () {
+      var next = !hijackOn;
+      try { if (TV && TV.setHijackEnabled) TV.setHijackEnabled(next); } catch (e) {}
+      ST.hijack = next; ST.hijack_enabled = next; saveSettings();
+      hijackOn = next;
+      try {
+        if (next && TV && TV.isHijackServiceEnabled && !TV.isHijackServiceEnabled()) {
+          SET.msg = t("hijack_need_acc");
+          setTimeout(function(){ try{ if (TV.openAccessibilitySettings) TV.openAccessibilitySettings(); }catch(e2){} }, 600);
+        } else SET.msg = "";
+      } catch (e2) {}
+      renderSettings();
+    }});
+    if (hijackOn) {
+      var svcOn = false;
+      try { svcOn = TV && TV.isHijackServiceEnabled ? !!TV.isHijackServiceEnabled() : false; } catch (e) {}
+      if (!svcOn) {
+        rows.push(info("hijack-need", t("hijack_need_title"), "", t("hijack_need_sub")));
+        rows.push({ kind: "action", key: "hijack-open-acc", label: t("hijack_open_acc"), act: function(){ try{ if (TV && TV.openAccessibilitySettings) TV.openAccessibilitySettings(); }catch(e){} }});
+      } else {
+        rows.push(info("hijack-on", t("hijack_on_title") || "Hijack is on", "", t("hijack_on_sub") || "Home + YouTube/Netflix/Disney/Paramount keep couch-tv in front. Settings + Free TV still work."));
+      }
+    } else {
+      rows.push(info("hijack-off", "", "", t("hijack_off_info") || "Turn on to keep couch-tv in front like Projectivy. Leaves Settings + Free TV alone."));
+    }
+    var hs = homeState();
+    if (hs === "ask") rows.push({ kind: "action", key: "make-home", label: t("home_row"), sub: t("home_row_sub"), act: requestHome });
+    else if (hs === "google_tv") {
+      rows.push(info("make-home", t("home_row"), "", t("home_google_tv")));
+      rows.push({ kind: "action", key: "make-home-again", label: t("home_row"), sub: t("home_row_sub"), act: requestHome });
+    } else if (hs === "held") rows.push(info("home-held", t("home_held") || "Couch-tv is Home", "", t("home_held_sub") || "Home button opens couch-tv"));
+    rows.push({ kind: "action", key: "hijack-system-settings", label: t("sys_settings"), sub: t("sys_settings_sub"), act: function(){ try{ if (TV && TV.openSystemSettings) TV.openSystemSettings(); else if (TV && TV.openSettings) TV.openSettings(); }catch(e){} } });
+    return rows;
   }
 
   // ---- about ----
