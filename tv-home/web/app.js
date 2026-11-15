@@ -688,9 +688,8 @@
     var loc = window.I18N ? window.I18N.locale() : "en-AU";
     var day = d.toLocaleDateString(loc, { weekday: "long", day: "numeric", month: "long" }).replace(",", "");
     day = day.charAt(0).toUpperCase() + day.slice(1);   // "lunes 27 de octubre" starts a line on screen
-    var w = WX_SHOW && data.weather && data.weather.temp != null ? data.weather : null;
-    $("date").innerHTML = '<span class="dline">' + esc(day) + (w ? '<span class="wx">' + wxIcon(w) + esc(tempText(w.temp)) +
-      '<span class="ww"> ' + esc(wxText(w)) + "</span></span>" : "") + "</span>";
+    // Keep date and weather in separate, stable regions: the temperature is shown in the dock pill.
+    $("date").innerHTML = '<span class="dline">' + esc(day) + "</span>";
     renderDockWeather();
     var ic = $("idle-clock"), idate = $("idle-date"), iwx = $("idle-wx");
     if (ic) ic.innerHTML = hm + (CLOCK24 ? "" : "<small>" + esc(h < 12 ? t("am") : t("pm")) + "</small>");
@@ -2957,10 +2956,29 @@
     raf(function () {
       if (request !== appFrameRequest || paintedFocusEl !== el) return;
       var box = face.getBoundingClientRect();
-      var width = Math.round(box.width), height = Math.round(box.height);
+      var faceWidth = face.offsetWidth || box.width, faceHeight = face.offsetHeight || box.height;
+      var rootStyle = window.getComputedStyle ? window.getComputedStyle(document.documentElement) : null;
+      var scale = rootStyle ? parseFloat(rootStyle.getPropertyValue("--app-focus-scale")) : 1.045;
+      var liftRem = rootStyle ? parseFloat(rootStyle.getPropertyValue("--app-focus-lift")) : -0.375;
+      if (!isFinite(scale) || scale <= 0) scale = 1.045;
+      if (!isFinite(liftRem)) liftRem = -0.375;
+      var liftPx = liftRem * (innerWidth / 120);
+      // The app is still part-way through its lift transition when this RAF runs. Use the
+      // transformed artwork center, subtract its current Y translation, then place the outline
+      // at the final lifted/scaled center instead of the old untransformed box.
+      var currentY = 0, transform = rootStyle && window.getComputedStyle(el).transform;
+      if (!transform || transform === "none") { scale = 1; liftPx = 0; }
+      if (transform && transform.indexOf("matrix3d(") === 0) {
+        var m3 = transform.slice(9, -1).split(","); currentY = parseFloat(m3[13]) || 0;
+      } else if (transform && transform.indexOf("matrix(") === 0) {
+        var m2 = transform.slice(7, -1).split(","); currentY = parseFloat(m2[5]) || 0;
+      }
+      var width = Math.round(faceWidth * scale), height = Math.round(faceHeight * scale);
+      var left = box.left + box.width / 2 - width / 2;
+      var top = box.top + box.height / 2 - currentY + liftPx - height / 2;
       if (frame.style.width !== width + "px") frame.style.width = width + "px";
       if (frame.style.height !== height + "px") frame.style.height = height + "px";
-      frame.style.transform = "translate3d(" + Math.round(box.left) + "px," + Math.round(box.top) + "px,0)";
+      frame.style.transform = "translate3d(" + Math.round(left) + "px," + Math.round(top) + "px,0)";
       frame.classList.add("on");
     });
   }
@@ -4448,7 +4466,7 @@
     SET.col = "secs"; SET.keyFocus = null;
   }
   function setMove(dx, dy) {
-    var rows = rowsNow();
+    var rows = rowsNow(), oldConfirm = SET.confirm, previousRow = -1;
     if (SET.lift) {
       if (dy) {
         var r = rows[indexOfKey(rows, SET.lift)];
@@ -4465,13 +4483,37 @@
         if (n !== SET.sec) { SET.sec = n; SET.sub = null; SET.msg = ""; SET.keyFocus = null; SET.ri = 0; }
       } else if (dx > 0) enterRows();
     } else if (dy) {
+      previousRow = SET.ri;
       SET.ri = stepRow(rows, SET.ri, dy);
       SET.keyFocus = rows[SET.ri] ? rows[SET.ri].key : null;
     } else if (dx && rows[SET.ri] && rows[SET.ri].adjust) {
       rows[SET.ri].adjust(document.documentElement.dir === "rtl" ? -dx : dx);
       SET.keyFocus = rows[SET.ri].key;
     } else if (dx < 0) leaveRows();
+    if (previousRow >= 0 && SET.col === "rows") {
+      focusSettingsRow(previousRow, oldConfirm, rows);
+      return;
+    }
     renderSettings();
+  }
+  function focusSettingsRow(previous, oldConfirm, rows) {
+    var box = $("set-rows"), previousEl = box.children[previous], nextEl = box.children[SET.ri];
+    if (previousEl && previousEl.classList.contains("srow")) {
+      previousEl.classList.remove("focus");
+      if (oldConfirm && rows[previous] && rows[previous].label != null) {
+        var label = previousEl.querySelector(".sl b");
+        if (label) label.textContent = rows[previous].label;
+      }
+    }
+    if (nextEl && nextEl.classList.contains("srow")) nextEl.classList.add("focus");
+    $("set-msg").textContent = SET.msg || "";
+    var current = rows[SET.ri];
+    $("set-hint").textContent = SET.typing ? t("hint_typing") : SET.lift ? t("hint_lift") : SET.col === "secs" ? t("hint_secs") :
+      current && current.move ? t("hint_rows_move") : SET.col === "rows" && current && current.adjust ? t("hint_slider") : t("hint_rows");
+    if (!nextEl || !nextEl.classList.contains("srow")) return;
+    var top = nextEl.offsetTop, bottom = top + nextEl.offsetHeight, view = box.clientHeight, edge = view / 4;
+    if (top - edge < box.scrollTop) box.scrollTop = Math.max(0, top - edge);
+    else if (bottom + edge > box.scrollTop + view) box.scrollTop = bottom + edge - view;
   }
   function setActivate() {
     if (SET.lift) { dropRow(); return; }
@@ -4557,10 +4599,8 @@
     $("set-head").textContent = SET.sub ? SET.sub.title() : t("sec_" + SECS[SET.sec][0]);
     var box = $("set-rows");
     // Rebuilding the rows drops the list back to the top on some TV engines (a 2020 Samsung,
-    // Tizen 5.5), and the smooth scroll below then ran from the top down to the row: every move
-    // past the first screen flashed up to the start and back. Put the list back where it was
-    // without animating, so only the small step to the next row is smooth. A different list
-    // (another section or page) starts at the top.
+    // Tizen 5.5). Restore the current scroll position without animation; a different list starts
+    // at the top. Ordinary D-pad row changes update focus in place and do not rebuild this list.
     var listId = SET.sec + "|" + $("set-head").textContent + "|" + $("set-crumb").textContent;
     var keep = box.getAttribute("data-list") === listId ? box.scrollTop : 0;
     box.setAttribute("data-list", listId);

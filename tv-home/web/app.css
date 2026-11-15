@@ -26,6 +26,8 @@
   --app-w: 11.5rem;      /* 184: Apple's eight-column width */
   --app-h: 6.5rem;       /* 16:9, the shape of an Android TV banner */
   --app-row-gap: 3.5rem;
+  --app-focus-scale: 1.045;
+  --app-focus-lift: -0.375rem;
 
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
@@ -407,8 +409,8 @@ html.still .tile.focus .face, html.still .tile.focus .face::after { animation: n
 }
 .theme-night .dock-weather.on { font-size: 1.125rem; }
 .dock-wx-icon { display: inline-flex; flex: none; align-items: center; }
-.dock-wx-icon svg { width: 1.75rem; height: 1.75rem; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
-.dock-wx-temp { font-size: 1.5rem; line-height: 1.75rem; font-weight: 700; }
+.dock-wx-icon svg { width: 2rem; height: 2rem; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
+.dock-wx-temp { font-size: 1.875rem; line-height: 2.125rem; font-weight: 720; font-variant-numeric: tabular-nums; }
 .dock-wx-copy { display: flex; align-items: baseline; gap: 0.5rem; min-width: 0; overflow: hidden; }
 .dock-wx-condition, .dock-wx-place { overflow: hidden; text-overflow: ellipsis; }
 .dock-wx-condition { font-weight: 550; }
@@ -431,6 +433,7 @@ html.still .tile.focus .face, html.still .tile.focus .face::after { animation: n
    transition. Avoid animated blur/shadows so the effect stays smooth on low-end TV GPUs. */
 .theme-night .app.tile { transition: transform 220ms cubic-bezier(.18,.72,.22,1); }
 .theme-night .app.focus { transform: translate3d(0,-0.375rem,0) scale(1.045); z-index: 3; }
+.theme-night .app.focus { transform: translate3d(0,var(--app-focus-lift),0) scale(var(--app-focus-scale)); }
 .theme-night .app.focus .face { box-shadow: none; }
 .theme-night .app.focus { will-change: transform; }
 .theme-night .app.tile.focus .face, .theme-night .app.tile.focus .face::after { animation: none; }
@@ -440,7 +443,7 @@ html.still .tile.focus .face, html.still .tile.focus .face::after { animation: n
 .app-focus-frame {
   position: fixed; z-index: 8; left: 0; top: 0; width: 7rem; height: 7rem; box-sizing: border-box;
   border: 0.22rem solid #fff; border-radius: 26%; opacity: 0; pointer-events: none;
-  transform: translate3d(-200px,-200px,0); transition: transform 280ms cubic-bezier(.18,.72,.22,1), opacity 90ms ease-out;
+  transform: translate3d(-200px,-200px,0); transition: transform 220ms cubic-bezier(.18,.72,.22,1), opacity 90ms ease-out;
   will-change: transform; contain: strict;
 }
 .app-focus-frame.on { opacity: 1; }
@@ -470,13 +473,33 @@ html.still .tile.focus .face, html.still .tile.focus .face::after { animation: n
   font-size: 2.25rem; line-height: 2.75rem; font-weight: 650; color: rgba(255, 255, 255, 0.94);
 }
 .theme-night.expanded .grid {
-  width: 100%; grid-template-columns: repeat(6, 7rem); justify-content: center;
-  padding: 1rem 1.5rem 2.5rem; gap: 2.5rem 1.625rem;
+  width: 100%; grid-template-columns: repeat(6, 7rem); grid-auto-rows: 10rem; justify-content: center;
+  padding: 1rem 1.5rem 2.5rem; column-gap: 1.625rem; row-gap: 1.25rem;
   background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none;
 }
-.theme-night.expanded .app, .theme-night.expanded .app .face { transition: none !important; }
+.theme-night.expanded .app {
+  display: flex; flex-direction: column; align-items: center; width: 7rem; height: 10rem;
+  overflow: visible; transition: none !important;
+}
+.theme-night.expanded .app .face {
+  display: flex; align-items: center; justify-content: center;
+  flex: none; width: 7rem; height: 7rem; overflow: hidden; box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(20, 22, 30, 0.78) !important;
+  -webkit-backdrop-filter: blur(1rem) saturate(135%); backdrop-filter: blur(1rem) saturate(135%);
+  box-shadow: inset 0 0.0625rem 0 rgba(255, 255, 255, 0.12), 0 0.5rem 1.25rem rgba(0, 0, 0, 0.22);
+}
+.theme-night.expanded .app .face img { width: 5rem; height: 5rem; margin: auto; object-fit: contain; }
+.theme-night.expanded .app .label {
+  position: relative; top: auto; left: auto; right: auto; display: -webkit-box;
+  width: 100%; height: 2.45rem; margin-top: 0.35rem; padding: 0 0.15rem;
+  opacity: 1; overflow: hidden; text-overflow: ellipsis; white-space: normal; overflow-wrap: anywhere;
+  -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  font-size: 1.05rem; line-height: 1.2rem; font-weight: 600; text-align: center; color: rgba(255, 255, 255, 0.94);
+}
+.theme-night.expanded .app .face.word { background: rgba(20, 22, 30, 0.9); }
 .theme-night.expanded .app.focus { transform: none; }
-.theme-night.expanded .app.focus .face { box-shadow: 0 0 0 0.22rem #fff; }
+.theme-night.expanded .app.focus .face { box-shadow: none; }
 .theme-night.expanded .dock-weather { display: none; }
 .old-engine.theme-night.expanded .grid { margin-left: auto; margin-right: auto; }
 
@@ -641,7 +664,7 @@ html.still .tile.focus .face, html.still .tile.focus .face::after { animation: n
 .set-head { margin: 0.25rem 0 1.5rem 1.75rem; font-size: 2.375rem; line-height: 3rem; font-weight: 680; letter-spacing: -0.015em; }
 .set-rows {
   position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 0.5rem;
-  margin: -1rem -1.75rem; padding: 1rem 1.75rem 3rem; overflow: hidden; scroll-behavior: smooth;
+  margin: -1rem -1.75rem; padding: 1rem 1.75rem 3rem; overflow: hidden; scroll-behavior: auto;
   /* a long list fades out at its edges instead of being cut */
   -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 1rem, #000 calc(100% - 3rem), transparent 100%);
   mask-image: linear-gradient(180deg, transparent 0, #000 1rem, #000 calc(100% - 3rem), transparent 100%);
@@ -1197,6 +1220,7 @@ html.idle-ambient-active .scene .gclock, html.idle-ambient-active .scene .date {
   visibility: visible;
 }
 .idle-ambient-inner {
+  width: 100%;
   text-align: center;
   color: #ffffff;
   opacity: 0.94;
@@ -1208,24 +1232,25 @@ html.idle-ambient-active .scene .gclock, html.idle-ambient-active .scene .date {
   opacity: 0.52;
 }
 .idle-clock {
+  width: 88vw; max-width: 110rem; margin: 0 auto;
   font-family: "Inter", sans-serif;
   font-weight: 750;
   font-size: 17rem;
   line-height: 0.9;
   letter-spacing: -0.065em;
+  font-variant-numeric: tabular-nums;
   text-shadow: 0 0.75rem 3rem rgba(0, 0, 0, 0.24);
 }
 .idle-clock small { display: none; }
 .idle-date {
-  margin-top: 1.25rem;
-  font-size: 1.5rem;
-  font-weight: 550;
-  opacity: 0.86;
+  display: flex; align-items: center; justify-content: center;
+  width: 88vw; max-width: 70rem; min-height: 3.5rem; margin: 1.25rem auto 0;
+  font-size: 2.35rem; line-height: 1.25; font-weight: 650; letter-spacing: 0.015em;
+  opacity: 0.9;
 }
 .idle-wx {
-  margin-top: 1.5rem;
-  font-size: 2rem;
-  font-weight: 600;
+  width: 88vw; margin: 3.5rem auto 0;
+  font-size: 2.35rem; line-height: 1.3; font-weight: 650;
   opacity: 0.96;
   text-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.3);
 }
@@ -2044,7 +2069,7 @@ html:not(.kids-on) .kids { display: none; }
 html.theme-night .app.focus,
 html.glass.theme-night .app.focus,
 html.lighter.theme-night .app.focus {
-  transform: translate3d(0,-0.375rem,0) scale(1.045) !important;
+  transform: translate3d(0,var(--app-focus-lift),0) scale(var(--app-focus-scale)) !important;
   transition: transform 220ms cubic-bezier(.18,.72,.22,1) !important;
 }
 html.theme-night .app.focus .face,
@@ -2058,5 +2083,12 @@ html.idle-ambient-active #grid,
 html.idle-ambient-active .app-focus-frame {
   display: none !important;
   opacity: 0 !important;
+}
+
+/* Settings are driven by discrete D-pad steps; avoid a slow shadow/scale animation per repeated key. */
+.settings .srow.focus, .settings .ssec.focus {
+  transform: none !important;
+  box-shadow: none !important;
+  transition: background-color 100ms ease, color 100ms ease !important;
 }
 

@@ -106,9 +106,23 @@ assert.strictEqual(config.home.smart_idle.enabled, true, "the scenic ambient scr
 assert(/ctx_hide/.test(js) && /app_hidden/.test(js), "apps remain hideable and recoverable in Home settings");
 assert(/\.theme-night \.app\.tile\.focus \.face, \.theme-night \.app\.tile\.focus \.face::after \{ animation: none; \}/.test(css),
   "focused app tiles do not run the expensive perpetual sway/glint animations");
-assert(/\.theme-night \.app\.focus \{ transform: translate3d\(0,-0\.375rem,0\) scale\(1\.045\); z-index: 3; \}/.test(css) && /\.app-focus-frame\.on \{ opacity: 1; \}/.test(css),
-  "app focus smoothly lifts the tile while a shared focus frame glides between positions");
-assert(/function placeAppFocusFrame\([\s\S]*?getBoundingClientRect\(\)/.test(js), "the focus frame tracks only the focused app tile");
+assert(/\.theme-night \.app\.focus \{ transform: translate3d\(0,var\(--app-focus-lift\),0\) scale\(var\(--app-focus-scale\)\); \}/.test(css) && /\.app-focus-frame\.on \{ opacity: 1; \}/.test(css),
+  "app focus lifts the tile while a shared focus frame glides to the final transform");
+assert(/function placeAppFocusFrame\([\s\S]*?getBoundingClientRect\(\)[\s\S]*?currentY[\s\S]*?liftPx/.test(js),
+  "the focus frame accounts for the app's lift so its center stays over the icon");
+assert(/\.theme-night\.expanded \.app \.label \{[\s\S]*?opacity: 1[\s\S]*?white-space: normal/.test(css) && /grid-auto-rows: 10rem/.test(css),
+  "app names are wrapped inside their own app-drawer tile rows");
+assert(/background: rgba\(20, 22, 30, 0\.78\)/.test(css) && /backdrop-filter: blur\(1rem\) saturate\(135%\)/.test(css),
+  "expanded app tiles have a dark frosted-glass backing");
+assert(/\.settings \.srow\.focus, \.settings \.ssec\.focus[\s\S]*?transform: none !important[\s\S]*?box-shadow: none !important/.test(css) && /scroll-behavior: auto/.test(css),
+  "settings focus and list scrolling avoid expensive animation and smooth-scroll lag");
+assert(/function setMove\([\s\S]*?focusSettingsRow\(previousRow, oldConfirm, rows\)/.test(js) && /function focusSettingsRow\(/.test(js),
+  "settings D-pad scrolling updates focus in place instead of rerendering the entire rows list");
+assert(/font-variant-numeric: tabular-nums/.test(css) && /\.idle-date[\s\S]*?width: 88vw[\s\S]*?font-size: 2\.35rem/.test(css) && /\.idle-wx[\s\S]*?margin: 3\.5rem auto 0/.test(css),
+  "ambient time and date stay centered, with a clear gap before the weather");
+assert(/\.dock-wx-temp \{ font-size: 1\.875rem/.test(css), "the dock temperature is larger and easier to read");
+assert(js.includes("Keep date and weather in separate, stable regions") && js.includes('$("date").innerHTML = \'<span class="dline">\' + esc(day) + "</span>";'),
+  "the main date has no duplicate weather reading beside it");
 assert(/avatar-art/.test(sourceOf("avatarHTML")) && /avatar-photo/.test(sourceOf("avatarHTML")),
   "people receive a portrait fallback and optional real profile image");
 const makeAvatarHTML = new Function("esc", "colourOf", sourceOf("avatarHTML") + "; return avatarHTML;")(String, p => p.colour);
