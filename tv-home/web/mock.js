@@ -255,14 +255,16 @@
         // Weather is synthetic here so the dock pill and idle ambient preview work without an API key
         // or depending on the preview user's location/network.
         if (path.indexOf("/api/weather") === 0) {
-          var forecast = [], now = new Date(), wxCodes = [2, 1, 3, 61, 0];
+          var forecast = [], forecast_daily = [], now = new Date(), wxCodes = [2, 1, 3, 61, 0];
           for (var wi = 0; wi < 5; wi++) {
             var hd = new Date(now.getTime() + (wi + 1) * 3600000);
-            var hh = hd.getHours(), mm = hd.getMinutes();
-            var date = hd.getFullYear() + "-" + String(hd.getMonth()+1).padStart(2,"0") + "-" + String(hd.getDate()).padStart(2,"0") + "T" + String(hh).padStart(2,"0") + ":00";
-            forecast.push({ date: date, temp: 18 - wi, high: 18 - wi, low: null, code: wxCodes[wi] });
+            var dateH = hd.getFullYear() + "-" + String(hd.getMonth()+1).padStart(2,"0") + "-" + String(hd.getDate()).padStart(2,"0") + "T" + String(hd.getHours()).padStart(2,"0") + ":00";
+            forecast.push({ date: dateH, temp: 18 - wi, high: 18 - wi, low: null, code: wxCodes[wi] });
+            var wd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + wi);
+            var dateD = wd.getFullYear() + "-" + String(wd.getMonth()+1).padStart(2,"0") + "-" + String(wd.getDate()).padStart(2,"0");
+            forecast_daily.push({ date: dateD, high: 18 - wi, low: 9 - wi, code: wxCodes[wi] });
           }
-          return resolve({ ok: true, temp: 15, code: 2, text: "Partly cloudy", is_day: true, forecast: forecast });
+          return resolve({ ok: true, temp: 15, code: 2, text: "Partly cloudy", is_day: true, forecast: forecast, forecast_daily: forecast_daily });
         }
         // Now playing (#31): ?music=1, a song that previous and next step through, play and pause toggle
         if (path.indexOf("/api/music") === 0) return resolve({ ok: true, music: arg("music") ? mockSong() : null });

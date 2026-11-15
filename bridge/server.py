@@ -2272,12 +2272,13 @@ async def _fetch_weather(location, timezone_name):
         cur, day = payload["current"], payload.get("daily", {})
         code = int(cur.get("weather_code", -1))
         highs, lows, codes = day.get("temperature_2m_max", []), day.get("temperature_2m_min", []), day.get("weather_code", [])
-        # Hourly forecast for the next 5 hours (instead of 5 days)
+        # Hourly forecast for the next 5 hours and daily 5-day as alternative
         hourly = payload.get("hourly", {})
         h_times = hourly.get("time") or []
         h_temps = hourly.get("temperature_2m") or []
         h_codes = hourly.get("weather_code") or []
         forecast = []
+        forecast_daily = []
         # Find the hour after current time
         cur_time = cur.get("time", "")
         start = 0
@@ -2301,22 +2302,24 @@ async def _fetch_weather(location, timezone_name):
                 "low": None,
                 "code": int(hcode) if isinstance(hcode, (int, float)) else -1,
             })
-        # Fallback to daily if hourly unavailable
+        # Daily 5-day for the other toggle
+        for i, date in enumerate(day.get("time", [])[:5]):
+            daily_code = int(codes[i]) if i < len(codes) and codes[i] is not None else -1
+            forecast_daily.append({
+                "date": date,
+                "high": round(highs[i]) if i < len(highs) and highs[i] is not None else None,
+                "low": round(lows[i]) if i < len(lows) and lows[i] is not None else None,
+                "code": daily_code,
+            })
         if not forecast:
-            for i, date in enumerate(day.get("time", [])[:5]):
-                daily_code = int(codes[i]) if i < len(codes) and codes[i] is not None else -1
-                forecast.append({
-                    "date": date,
-                    "high": round(highs[i]) if i < len(highs) and highs[i] is not None else None,
-                    "low": round(lows[i]) if i < len(lows) and lows[i] is not None else None,
-                    "code": daily_code,
-                })
+            forecast = list(forecast_daily)
         return {
             "place": location["place"], "temp": round(cur["temperature_2m"]),
             "code": code, "text": WMO.get(code, ""), "is_day": bool(cur.get("is_day")),
             "high": round(day["temperature_2m_max"][0]) if day.get("temperature_2m_max") else None,
             "low": round(day["temperature_2m_min"][0]) if day.get("temperature_2m_min") else None,
             "forecast": forecast,
+            "forecast_daily": forecast_daily,
         }
     except Exception as exc:
         log.warning("weather (%s): %s", location.get("place", "custom location"), exc)
@@ -2538,6 +2541,8 @@ def clean_settings(s):
         out["nav_sound"] = s["nav_sound"]
     if s.get("start_focus") in ("people", "apps", "keep_watching"):
         out["start_focus"] = s["start_focus"]
+    if s.get("forecast") in ("hours", "days"):
+        out["forecast"] = s["forecast"]
     if s.get("glass_focus") in ("colour", "glass"):   # glass app icons: the focused app (#32)
         out["glass_focus"] = s["glass_focus"]
     if isinstance(s.get("video"), bool):

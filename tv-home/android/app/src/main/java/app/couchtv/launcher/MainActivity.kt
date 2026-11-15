@@ -616,7 +616,7 @@ class MainActivity : Activity() {
                         val hTimes = hourly.optJSONArray("time") ?: JSONArray()
                         val hTemps = hourly.optJSONArray("temperature_2m")
                         val hCodes = hourly.optJSONArray("weather_code")
-                        val days = JSONArray()
+                        val hourlyForecast = JSONArray()
                         var hStart = 0
                         val curTime = current.optString("time", "")
                         if (curTime.isNotEmpty() && hTimes.length() > 0) {
@@ -625,16 +625,16 @@ class MainActivity : Activity() {
                                 if (hTimes.optString(idx) > curTime) { hStart = idx; break }
                             }
                         }
-                        var hCount = 0
                         for (i in hStart until minOf(hStart + 5, hTimes.length())) {
                             val day = JSONObject().put("date", hTimes.optString(i)).put("code", hCodes?.optInt(i, -1) ?: -1)
                             val temp = hTemps?.optDouble(i, Double.NaN) ?: Double.NaN
                             day.put("temp", if (temp.isFinite()) temp.roundToInt() else JSONObject.NULL)
                             day.put("high", if (temp.isFinite()) temp.roundToInt() else JSONObject.NULL)
                             day.put("low", JSONObject.NULL)
-                            days.put(day); hCount++
+                            hourlyForecast.put(day)
                         }
-                        if (hCount == 0) {
+                        val dailyForecast = JSONArray()
+                        run {
                             val dates = daily.optJSONArray("time") ?: JSONArray()
                             val highs = daily.optJSONArray("temperature_2m_max")
                             val lows = daily.optJSONArray("temperature_2m_min")
@@ -645,12 +645,13 @@ class MainActivity : Activity() {
                                 val low = lows?.optDouble(i, Double.NaN) ?: Double.NaN
                                 day.put("high", if (high.isFinite()) high.roundToInt() else JSONObject.NULL)
                                 day.put("low", if (low.isFinite()) low.roundToInt() else JSONObject.NULL)
-                                days.put(day)
+                                dailyForecast.put(day)
                             }
                         }
+                        val useForecast = if (hourlyForecast.length() > 0) hourlyForecast else dailyForecast
                         JSONObject().put("temp", current.getDouble("temperature_2m").roundToInt())
                             .put("code", code).put("text", "").put("is_day", current.optInt("is_day", 0) == 1)
-                            .put("forecast", days).toString()
+                            .put("forecast", useForecast).put("forecast_daily", dailyForecast).toString()
                     } finally { conn.disconnect() }
                 } catch (e: Exception) {
                     JSONObject().put("error", e.message ?: "Weather request failed").toString()

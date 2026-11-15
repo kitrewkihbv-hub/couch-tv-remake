@@ -115,7 +115,7 @@
   }
   // Home settings made on this TV with the gear tile (see "home settings" below). They win over
   // config.js. ST is the saved object; the rest are read from it in readConfig().
-  var ST = {}, WX_SHOW = true, WX_F = false, WX_EVERY = 30, HIDDEN_TV = [], WEATHER_STATE = "loading";
+  var ST = {}, WX_SHOW = true, WX_F = false, WX_EVERY = 30, FORECAST_MODE = "hours", HIDDEN_TV = [], WEATHER_STATE = "loading";
   var IDLE_PHOTO_STEPS = [0, 5, 10, 15, 30, 60];
   var IDLE_PHOTO_SECONDS = 0, idlePhotoTimer = null, idlePhotoActive = false;
   var WX_AMBIENT = true, WX_SUN_GRADE = true;
@@ -389,6 +389,7 @@
     WX_SHOW = ST.wx_show !== false;
     WX_F = (ST.wx_unit || HOME.wx_unit) === "f";   // Home settings, else home.wx_unit in config.json
     WX_EVERY = [15, 30, 60].indexOf(ST.wx_every) >= 0 ? ST.wx_every : 30;
+    FORECAST_MODE = ST.forecast === "days" ? "days" : "hours";
     WX_AMBIENT = typeof ST.ambient_weather === "boolean" ? ST.ambient_weather : HOME.ambient_weather === true;   // off unless chosen
     WX_SUN_GRADE = typeof ST.ambient_sun_grade === "boolean" ? ST.ambient_sun_grade : HOME.ambient_sun_grade === true;
     var mine = TV_ID || CFG.default_tv;
@@ -668,17 +669,24 @@
   function renderIdleForecast(weather) {
     var el = $("idle-forecast");
     if (!el) return;
-    var hours = weather && WX_SHOW && Array.isArray(weather.forecast) ? weather.forecast.slice(0, 5) : [];
-    if (!hours.length) {
+    // Pick hourly or daily based on Home settings toggle (default hours)
+    var useHours = (typeof FORECAST_MODE !== "undefined" ? FORECAST_MODE : "hours") === "hours";
+    var list = [];
+    if (weather && WX_SHOW) {
+      if (useHours && Array.isArray(weather.forecast)) list = weather.forecast.slice(0, 5);
+      else if (!useHours && Array.isArray(weather.forecast_daily)) list = weather.forecast_daily.slice(0, 5);
+      else if (Array.isArray(weather.forecast)) list = weather.forecast.slice(0, 5);
+    }
+    if (!list.length) {
       el.classList.remove("on");
       el.innerHTML = "";
       return;
     }
     var locale = window.I18N ? window.I18N.locale() : "en-US";
-    el.innerHTML = hours.map(function (h) {
+    el.innerHTML = list.map(function (h) {
       var label = "";
       if (h.date) {
-        // Hourly: "2025-11-14T14:00" -> "2 PM" / "14:00" ; Daily fallback: "2025-11-14" -> weekday
+        // Hourly: "2025-11-14T14:00" -> "2 PM" / "14:00" ; Daily: "2025-11-14" -> weekday
         if (/T/.test(h.date)) {
           var d = new Date(h.date);
           if (!isNaN(d.getTime())) {
@@ -1292,7 +1300,7 @@
       if (!j || !j.current || !isFinite(Number(j.current.temperature_2m)) || !isFinite(Number(j.current.weather_code))) {
         throw new Error("Weather service returned incomplete data");
       }
-      var c = j.current, d = j.daily || {}, h = j.hourly || {}, code = Math.round(c.weather_code), forecast = [];
+      var c = j.current, d = j.daily || {}, h = j.hourly || {}, code = Math.round(c.weather_code), forecast = [], forecast_daily = [];
       var hTimes = h.time || [], hTemps = h.temperature_2m || [], hCodes = h.weather_code || [];
       var curTime = c.time || "";
       var start = 0;
@@ -1307,14 +1315,13 @@
         forecast.push({ date: hTimes[i], temp: hTemps[i] == null ? null : Math.round(hTemps[i]),
           high: hTemps[i] == null ? null : Math.round(hTemps[i]), low: null, code: hCodes[i] == null ? -1 : Math.round(hCodes[i]) });
       }
-      if (!forecast.length) {
-        var dates = d.time || [], highs = d.temperature_2m_max || [], lows = d.temperature_2m_min || [], codes = d.weather_code || [];
-        for (var i = 0; i < Math.min(5, dates.length); i++) {
-          forecast.push({ date: dates[i], high: highs[i] == null ? null : Math.round(highs[i]),
-            low: lows[i] == null ? null : Math.round(lows[i]), code: codes[i] == null ? -1 : Math.round(codes[i]) });
-        }
+      var dates = d.time || [], highs = d.temperature_2m_max || [], lows = d.temperature_2m_min || [], codes = d.weather_code || [];
+      for (var i = 0; i < Math.min(5, dates.length); i++) {
+        forecast_daily.push({ date: dates[i], high: highs[i] == null ? null : Math.round(highs[i]),
+          low: lows[i] == null ? null : Math.round(lows[i]), code: codes[i] == null ? -1 : Math.round(codes[i]) });
       }
-      return done({ temp: Math.round(c.temperature_2m), code: code, text: "", is_day: !!c.is_day, forecast: forecast });
+      if (!forecast.length) forecast = forecast_daily.slice();
+      return done({ temp: Math.round(c.temperature_2m), code: code, text: "", is_day: !!c.is_day, forecast: forecast, forecast_daily: forecast_daily });
     }).catch(function (err) {
       clearTimeout(giveUp);
       if (TV && TV.weather && !nativeFallback) return weatherNative();
@@ -3854,6 +3861,9 @@
       } },
       { kind: "cycle", key: "wx-every", label: t("wx_every"), value: t("every_min", { n: WX_EVERY }), act: function () {
         WX_EVERY = WX_EVERY === 15 ? 30 : WX_EVERY === 30 ? 60 : 15; ST.wx_every = WX_EVERY; saveSettings();
+      } },
+      { kind: "cycle", key: "forecast", label: t("forecast"), sub: t("forecast_sub"), value: FORECAST_MODE === "hours" ? t("forecast_hours") : t("forecast_days"), act: function () {
+        FORECAST_MODE = FORECAST_MODE === "hours" ? "days" : "hours"; ST.forecast = FORECAST_MODE; saveSettings(); renderIdleForecast(data.weather); renderSettings();
       } },
       info("wx-provider", t("wx_provider"), "Open-Meteo", t("wx_provider_note")),
       info("wx-night", t("wx_night_only"))
