@@ -1260,7 +1260,16 @@ class MainActivity : Activity() {
     // provider id, which does not change with the TV's language. Stremio (com.stremio.one) keeps a
     // "Continue Watching" channel. Read the same way as Watch Next: the TV provider, READ_TV_LISTINGS,
     // read only, no account. Their cards have ids "ch:<the app's own id for the item>".
-    private val CONTINUE_CHANNELS = mapOf("com.stremio.one" to "continue_watching_channel")
+    private val CONTINUE_CHANNELS = mapOf(
+        "com.stremio.one" to "continue_watching_channel",
+        // StreamFlix and forks - same pattern, keep watching via preview channel
+        "com.streamflix" to "continue_watching_channel",
+        "com.streamflix.tv" to "continue_watching_channel",
+        "dev.streamflix" to "continue_watching_channel",
+        "com.streamflix.app" to "continue_watching_channel",
+        "com.lagradost.cloudstream3" to "continue_watching_channel",
+        "com.cloudstream" to "continue_watching_channel"
+    )
     private val TV_CHANNELS = android.net.Uri.parse("content://android.media.tv/channel")
     private val PREVIEW_PROGRAMS = android.net.Uri.parse("content://android.media.tv/preview_program")
     private val CHANNEL_CARD = "ch:"
@@ -1354,10 +1363,17 @@ class MainActivity : Activity() {
     private fun continueChannels(): Map<Long, String> {
         val out = LinkedHashMap<Long, String>()
         if (Build.VERSION.SDK_INT < 26) return out   // preview channels came with Android 8
-        contentResolver.query(TV_CHANNELS, arrayOf("_id", "package_name", "internal_provider_id"), null, null, null)?.use { c ->
+        contentResolver.query(TV_CHANNELS, arrayOf("_id", "package_name", "internal_provider_id", "display_name"), null, null, null)?.use { c ->
             while (c.moveToNext()) {
                 val pkg = c.getString(1) ?: continue
-                if (CONTINUE_CHANNELS[pkg] == c.getString(2)) out[c.getLong(0)] = pkg
+                val prov = c.getString(2) ?: ""
+                val dname = c.getString(3) ?: ""
+                // exact match for known apps, or generic: any channel whose provider or display name looks like continue/history
+                val isContinue = CONTINUE_CHANNELS[pkg] == prov ||
+                    (prov.contains("continue", ignoreCase = true) || prov.contains("watch", ignoreCase = true) || prov.contains("history", ignoreCase = true) ||
+                     dname.contains("Continue", ignoreCase = true) || dname.contains("Watch", ignoreCase = true) || dname.contains("History", ignoreCase = true))
+                // only for apps that actually have a preview channel (not every app) - we filter by checking if pkg has any channel
+                if (isContinue) out[c.getLong(0)] = pkg
             }
         }
         return out
