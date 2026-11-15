@@ -120,7 +120,13 @@ assert(/function setMove\([\s\S]*?focusSettingsRow\(previousRow, oldConfirm, row
   "settings D-pad scrolling updates focus in place instead of rerendering the entire rows list");
 assert(/font-variant-numeric: tabular-nums/.test(css) && /\.idle-date[\s\S]*?width: 88vw[\s\S]*?font-size: 2\.35rem/.test(css) && /\.idle-wx[\s\S]*?margin: 3\.5rem auto 0/.test(css),
   "ambient time and date stay centered, with a clear gap before the weather");
-assert(/\.dock-wx-temp \{ font-size: 1\.875rem/.test(css), "the dock temperature is larger and easier to read");
+assert(/\.dock-wx-temp \{ font-size: 2\.125rem/.test(css) && /min-height: 4\.125rem/.test(css), "the dock weather pill and temperature are larger and easier to read");
+assert(/\.theme-night \.app\.tile \{ transition: transform 320ms cubic-bezier\(\.16,\.84,\.2,1\)/.test(css) && /\.app-focus-frame \{[\s\S]*?transition: transform 320ms/.test(css),
+  "the app highlight and lifted tile use a longer, matched easing for smoother movement");
+assert(/Every Night-look app gets its own dark frosted tile/.test(css) && /html\.theme-night \.app \.face/.test(css),
+  "every app icon receives its own dark glass background in the home dock and drawer");
+assert(/html\.setting \.settings[\s\S]*?backdrop-filter: none !important/.test(css) && /html\.setting \.set-rows[\s\S]*?mask-image: none !important/.test(css),
+  "settings avoids the full-screen blur and scrolling mask that cost GPU time");
 assert(js.includes("Keep date and weather in separate, stable regions") && js.includes('$("date").innerHTML = \'<span class="dline">\' + esc(day) + "</span>";'),
   "the main date has no duplicate weather reading beside it");
 assert(/avatar-art/.test(sourceOf("avatarHTML")) && /avatar-photo/.test(sourceOf("avatarHTML")),
@@ -141,8 +147,8 @@ const glassGlyphType = new Function("", sourceOf("glassGlyphType") + "; return g
   [{ name: "Downloader", package: "com.esaba.downloader" }, "downloader"],
   [{ name: "LocalSend", package: "org.localsend.localsend_app" }, "localsend"]
 ].forEach(([app, expected]) => assert.strictEqual(glassGlyphType(app), expected, app.name + " is recognized for a transparent glyph"));
-assert(/\.theme-night \.app\.clear-always \.face[\s\S]*?background: transparent !important/.test(css),
-  "the six household apps have no opaque icon tile background");
+assert(/html\.theme-night \.app\.clear-always \.face[\s\S]*?background: linear-gradient\(145deg[\s\S]*?rgba\(18, 20, 28, 0\.76\) !important/.test(css),
+  "the selected glyph apps keep the same dark glass tile backing as every other app");
 assert(/GLASS_ICONS \? "\.app \.face:not\(\.tool\):not\(\.word\) > img" : "\.app\.clear-always \.face > img"/.test(js),
   "the six selected apps are cut out even when the optional global glass-icon setting is off");
 const paintFocusBlock = js.slice(js.indexOf("  function paintFocus()"), js.indexOf("  // Start on the chosen place", js.indexOf("  function paintFocus()")));
