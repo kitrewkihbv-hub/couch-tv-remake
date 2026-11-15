@@ -692,6 +692,26 @@ class MainActivity : Activity() {
             return true
         }
 
+        /** Projectivy-style button hijack: keeps couch-tv in front. Leaves Settings and Free TV alone. */
+        @JavascriptInterface
+        fun hijackEnabled(): Boolean = getSharedPreferences("home", MODE_PRIVATE).getBoolean("hijack_enabled", false)
+
+        @JavascriptInterface
+        fun setHijackEnabled(enabled: Boolean): Boolean {
+            getSharedPreferences("home", MODE_PRIVATE).edit().putBoolean("hijack_enabled", enabled).apply()
+            FireWatch.setHijackEnabled(this@MainActivity, enabled)
+            return true
+        }
+
+        @JavascriptInterface
+        fun isHijackServiceEnabled(): Boolean = FireWatch.connected
+
+        @JavascriptInterface
+        fun openAccessibilitySettings(): Boolean = try {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            true
+        } catch (_: Exception) { false }
+
         /** Android's Watch Next list (what each app says you are in the middle of), as JSON. */
         @JavascriptInterface
         fun watchNext(): String = readWatchNext().toString()

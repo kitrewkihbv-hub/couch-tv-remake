@@ -181,6 +181,14 @@
     "com.apple.atve.androidtv.appletv", "com.cbs.ca", "com.disney.disneyplus", "com.google.android.youtube.tv",
     "com.netflix.ninja", "com.sbs.ondemand.tv", "com.spotify.tv.android", "com.swm.live", "com.wbd.stream",
     "tv.twitch.android.app"];
+  window.MOCK_TV = window.MOCK_TV || { _hijack: false,
+    hijackEnabled: function(){ return window.MOCK_TV._hijack; },
+    setHijackEnabled: function(v){ window.MOCK_TV._hijack = !!v; return true; },
+    isHijackServiceEnabled: function(){ return window.MOCK_TV._hijack; },
+    openAccessibilitySettings: function(){ return true; }
+  };
+  // expose as TV for app.js
+  window.TV = window.MOCK_TV;
   window.MOCK_ICON = function (pkg) {
     return LOGOS.indexOf(pkg) >= 0 ? "../../remote/src/app-logos/" + pkg + ".png" : null;
   };

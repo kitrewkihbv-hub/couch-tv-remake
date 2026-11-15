@@ -4364,7 +4364,33 @@
     var hs = homeState(), homeRows = [];
     if (hs === "ask") homeRows.push({ kind: "action", key: "make-home", label: t("home_row"), sub: t("home_row_sub"), act: requestHome });
     else if (hs === "google_tv") homeRows.push(info("make-home", t("home_row"), "", t("home_google_tv")));
-    return homeRows.concat([
+    // Projectivy-style hijack: toggle that keeps couch-tv in front, accessibility-based, safe (Leaves Settings + Free TV alone)
+    var hijackOn = false;
+    try { hijackOn = TV && TV.hijackEnabled ? !!TV.hijackEnabled() : !!(ST.hijack || ST.hijack_enabled); } catch (e) {}
+    var hijackRows = [];
+    hijackRows.push({ kind: "toggle", key: "hijack", label: t("hijack_title"), sub: t("hijack_sub"), value: hijackOn ? t("on") : t("off"), act: function () {
+      var next = !hijackOn;
+      try { if (TV && TV.setHijackEnabled) TV.setHijackEnabled(next); } catch (e) {}
+      ST.hijack = next; ST.hijack_enabled = next; saveSettings();
+      hijackOn = next;
+      try {
+        if (next && TV && TV.isHijackServiceEnabled && !TV.isHijackServiceEnabled()) {
+          SET.msg = t("hijack_need_acc");
+          // nudge to system Accessibility - leaves Settings button unhijacked so user can still get there
+          setTimeout(function(){ try{ if (TV.openAccessibilitySettings) TV.openAccessibilitySettings(); }catch(e2){} }, 600);
+        } else SET.msg = "";
+      } catch (e2) {}
+      renderSettings();
+    }});
+    if (hijackOn) {
+      var svcOn = false;
+      try { svcOn = TV && TV.isHijackServiceEnabled ? !!TV.isHijackServiceEnabled() : false; } catch (e) {}
+      if (!svcOn) {
+        hijackRows.push(info("hijack-need", t("hijack_need_title"), "", t("hijack_need_sub")));
+        hijackRows.push({ kind: "action", key: "hijack-open-acc", label: t("hijack_open_acc"), act: function(){ try{ if (TV && TV.openAccessibilitySettings) TV.openAccessibilitySettings(); }catch(e){} }});
+      }
+    }
+    return homeRows.concat(hijackRows).concat([
       info("ver", t("about_version"), ver || t("about_web")),
       info("code", t("about_code"), REPO_URL),
       info("run", t("about_running"), t(run)),

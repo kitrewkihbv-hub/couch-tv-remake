@@ -2543,6 +2543,10 @@ def clean_settings(s):
         out["start_focus"] = s["start_focus"]
     if s.get("forecast") in ("hours", "days"):
         out["forecast"] = s["forecast"]
+    if isinstance(s.get("hijack"), bool):
+        out["hijack"] = s["hijack"]
+    if isinstance(s.get("hijack_enabled"), bool):
+        out["hijack_enabled"] = s["hijack_enabled"]
     if s.get("glass_focus") in ("colour", "glass"):   # glass app icons: the focused app (#32)
         out["glass_focus"] = s["glass_focus"]
     if isinstance(s.get("video"), bool):

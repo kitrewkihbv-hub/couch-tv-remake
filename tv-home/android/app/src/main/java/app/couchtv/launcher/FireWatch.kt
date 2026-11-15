@@ -58,18 +58,39 @@ class FireWatch : AccessibilityService() {
 
     /** Xiaomi TVs only (issue #54): every other TV's Home key is left exactly as before. */
     override fun onKeyEvent(event: KeyEvent): Boolean {
+        if (CrashGuard.standingAside(this)) return false
+        // Projectivy-style hijack: when enabled, swallow HOME + Onn/GTV app buttons
+        // but leave Settings (176) and Free TV (297) alone so the box is never stuck.
+        if (isHijackEnabled(this)) {
+            if (event.keyCode == KeyEvent.KEYCODE_SETTINGS) return false
+            if (event.keyCode == 297) return false // FEATURED_APP_1 = Free TV on Onn 4K Pro
+            val hijackCodes = setOf(
+                KeyEvent.KEYCODE_HOME,  // 3
+                190, // BUTTON_3 = YouTube on Onn
+                191, // BUTTON_4 = Netflix
+                196, // BUTTON_9 = Disney+
+                197  // BUTTON_10 = Paramount+
+            )
+            if (event.keyCode in hijackCodes) {
+                if (event.action == KeyEvent.ACTION_UP && event.repeatCount == 0) bringBack()
+                return true
+            }
+            // other keys pass through
+            return false
+        }
         if (!isXiaomi()) return false
         val homeKey = event.keyCode == KeyEvent.KEYCODE_HOME ||
             (event.keyCode == KeyEvent.KEYCODE_BUTTON_5 && event.scanCode == XIAOMI_MI_SCAN)
-        if (!homeKey || CrashGuard.standingAside(this)) return false
+        if (!homeKey) return false
         if (event.action == KeyEvent.ACTION_UP && event.repeatCount == 0) bringBack()
         return true
     }
 
     override fun onServiceConnected() {
+        instance = this
         connected = true
-        // Key filtering is switched on at run time and only on Xiaomi, so no other TV sees key presses here.
-        if (isXiaomi()) runCatching {
+        // Key filtering is switched on at run time on Xiaomi and when hijack is on (Projectivy-style), so other TVs only see it then.
+        if (isXiaomi() || isHijackEnabled(this)) runCatching {
             serviceInfo = serviceInfo.also { it.flags = it.flags or AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS }
         }
         homeClasses = homeActivitiesOf(this)
@@ -91,6 +112,7 @@ class FireWatch : AccessibilityService() {
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
+        instance = null
         connected = false
         handler.removeCallbacks(recheck)
         recheckPending = false
@@ -186,8 +208,27 @@ class FireWatch : AccessibilityService() {
     }
 
     companion object {
+        /** Live instance while bound, for live flag updates. */
+        @Volatile private var instance: FireWatch? = null
         /** Set while Android has this service bound. */
         @Volatile var connected = false
+
+        fun isHijackEnabled(c: Context): Boolean =
+            c.getSharedPreferences("home", Context.MODE_PRIVATE).getBoolean("hijack_enabled", false)
+
+        fun setHijackEnabled(c: Context, enabled: Boolean) {
+            c.getSharedPreferences("home", Context.MODE_PRIVATE).edit().putBoolean("hijack_enabled", enabled).apply()
+            val svc = instance
+            if (svc != null) {
+                try {
+                    val info = svc.serviceInfo
+                    if (enabled) info.flags = info.flags or AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
+                    else if (!isXiaomi()) info.flags = info.flags and AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS.inv()
+                    svc.serviceInfo = info
+                } catch (_: Exception) {}
+            }
+            if (enabled) ensure(c)
+        }
         private const val FRONT_CHECK_MS = 800L   // Android 10: how long to wait before checking the move worked
         private const val DEBOUNCE_MS = 1200L   // one jump per press, not one per event
         private const val BOOT_WINDOW_MS = 2 * 60_000L
