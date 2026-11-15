@@ -1273,9 +1273,9 @@ class MainActivity : Activity() {
     /** Asks once. Without it Android answers the Watch Next query with nothing. */
     private fun askWatchNextPermission() {
         if (checkSelfPermission(READ_TV) == PackageManager.PERMISSION_GRANTED) return
-        if (prefs.getBoolean("askedWatchNext", false)) return
-        prefs.edit().putBoolean("askedWatchNext", true).apply()
+        // ask every time until granted (was once then never again)
         try { requestPermissions(arrayOf(READ_TV), 77) } catch (e: Exception) {}
+        prefs.edit().putBoolean("askedWatchNext", true).apply()
     }
 
     private fun readWatchNext(): JSONArray {
