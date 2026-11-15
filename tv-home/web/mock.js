@@ -19,7 +19,7 @@
 //   icons=glass         home.glass_icons: Apple style clear app icons on glass
 //   amount=1..5         home.glass_amount, how clear the glass is (1 frosted, 3 the default, 5 very clear)
 //   clockstyle=liquid   home.clock_style: the Night clock as liquid glass
-//   unit=f              home.wx_unit: temperatures in Fahrenheit     place=Seattle: preview the home at the user's location
+//   unit=f              home.wx_unit: temperatures in Fahrenheit     place=Vancouver: preview the home at the user's location
 //   wxfx=1              home.ambient_weather: rain, snow and fog over the scenes (off unless set)
 //   sungrade=1          home.ambient_sun_grade: the sun's colour over the scenes (off unless set)
 //                       (also ?test_wx=<WMO code, 63 rain, 73 snow, 45 fog, 95 storm> and ?test_alt=<sun height, degrees>)
@@ -53,10 +53,10 @@
 
   // ---------- the settings config.js would carry ----------
   var NAMES = ["Alex", "Sam", "Jordan", "Riley", "Casey", "Morgan", "Taylor", "Jamie"];
-  var cfg = { weather: { lat: -33.8688, lon: 151.2093, place: "Sydney", timezone: "Australia/Sydney" },
+  var cfg = { weather: { lat: 45.6387, lon: -122.6615, place: "Vancouver, Washington", timezone: "America/Los_Angeles" },
     default_tv: "living-room", tvs: [{ id: "living-room", name: "Living room" }], home: {} };
-  if (arg("place") === "Seattle") {
-    cfg.weather = { lat: 47.6062, lon: -122.3321, place: "Seattle", timezone: "America/Los_Angeles" };
+  if (arg("place") === "Vancouver") {
+    cfg.weather = { lat: 45.6387, lon: -122.6615, place: "Vancouver, Washington", timezone: "America/Los_Angeles" };
   }
   if (arg("unit")) cfg.home.wx_unit = arg("unit");
   var n = arg("people");

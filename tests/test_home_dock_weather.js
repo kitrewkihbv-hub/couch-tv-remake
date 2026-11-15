@@ -100,7 +100,11 @@ assert(/requestAnimationFrame/.test(sourceOf("placeAppFocusFrame")) && /clearFoc
   "focus-frame work is coalesced and the dock selection is cleared in ambient mode");
 assert(/html\.glass\.theme-night \.app\.focus \.face[\s\S]*?box-shadow: none !important/.test(css),
   "legacy glass focus styles cannot draw a second box around the active app");
-assert.strictEqual(config.weather.place, "Seattle", "the packaged default weather location matches the target device");
+assert.strictEqual(config.weather.place, "Vancouver, Washington", "the packaged default weather location matches the user's city");
+assert.strictEqual(config.weather.lat, 45.6387, "the Vancouver default latitude is packaged");
+assert.strictEqual(config.weather.lon, -122.6615, "the Vancouver default longitude is packaged");
+assert(/function weatherDirect\(nativeFallback\)[\s\S]*?TV\.weather && !nativeFallback/.test(js) && /weatherNative\(\)\.catch\(function \(\) \{ return weatherDirect\(true\); \}\)/.test(js),
+  "a failed native weather request falls back to the WebView network path instead of declaring weather unavailable");
 assert.strictEqual(config.home.wx_unit, "f", "the packaged home uses Fahrenheit");
 assert.strictEqual(config.home.smart_idle.enabled, true, "the scenic ambient screen activates when the home has been idle");
 assert(/ctx_hide/.test(js) && /app_hidden/.test(js), "apps remain hideable and recoverable in Home settings");
@@ -123,8 +127,27 @@ assert(/function setMove\([\s\S]*?focusSettingsRow\(previousRow, oldConfirm, row
 assert(/font-variant-numeric: tabular-nums/.test(css) && /\.idle-date[\s\S]*?width: 88vw[\s\S]*?font-size: 2\.35rem/.test(css) && /\.idle-wx[\s\S]*?margin: 3\.5rem auto 0/.test(css),
   "ambient time and date stay centered, with a clear gap before the weather");
 assert(/\.dock-wx-temp \{ font-size: 2\.125rem/.test(css) && /min-height: 4\.125rem/.test(css), "the dock weather pill and temperature are larger and easier to read");
-assert(/\.theme-night \.app\.tile \{ transition: transform 200ms cubic-bezier\(\.22,\.61,\.36,1\)/.test(css) && /\.app-focus-frame \{[\s\S]*?transition: transform 200ms/.test(css),
-  "the app highlight and lifted tile use matched, responsive easing for smooth movement");
+assert(/\.theme-night \.app\.tile \{ transition: transform 140ms cubic-bezier\(\.16,1,\.3,1\)/.test(css) && /\.app-focus-frame \{[\s\S]*?transition: transform 140ms/.test(css),
+  "the app highlight and lifted tile use matched, responsive easing for smoother D-pad movement");
+assert(/will-change: transform; backface-visibility: hidden/.test(css) && !css.includes("\n.theme-night .app.focus { will-change: transform; }"),
+  "every dock tile keeps one promoted layer, so moving focus does not build and tear down a layer per press");
+assert(/\.glass-icons \.app \.face img \{ transition: opacity 0\.2s; \}/.test(css),
+  "focus changes do not animate the icon's grayscale filter, which re-rasterised every frame of the lift");
+assert(/function readFocusMetrics\(\)/.test(js) && /var scale = focusScale, liftPx = focusLiftPx;/.test(js),
+  "the focus outline's scale and lift are read once rather than recomputing root style on every key press");
+assert(/WEATHER_RETRY_STEPS[\s\S]*?scheduleWeatherRetry\(\)/.test(js) && /function scheduleWeatherRetry\(\)[\s\S]*?refreshWeather\(\)/.test(js),
+  "a failed weather reading is retried within seconds instead of waiting for the half-hourly refresh");
+const validPlace = new Function("isFinite", sourceOf("validPlace") + "; return validPlace;")(isFinite);
+assert.strictEqual(validPlace({ place: "Vancouver, Washington", timezone: "America/Los_Angeles" }), null,
+  "a place with a name but no coordinates is refused, so the request cannot go out as latitude=undefined");
+assert.strictEqual(validPlace({ lat: "abc", lon: 1 }), null, "a place with unreadable coordinates is refused");
+assert.deepStrictEqual(validPlace({ name: "Vancouver, Washington", lat: 45.6387, lon: -122.6615, timezone: "America/Los_Angeles" }),
+  { lat: 45.6387, lon: -122.6615, place: "Vancouver, Washington", timezone: "America/Los_Angeles" },
+  "a place chosen on the TV keeps its name, coordinates and time zone");
+assert(/WXCFG = validPlace\(ST\.place\) \|\| validPlace\(CFG\.weather\) \|\| WX_FALLBACK;/.test(js),
+  "an unset or incomplete location falls back to the packaged place instead of reporting no weather");
+assert(/new AbortController\(\)[\s\S]*?control\.abort\(\)/.test(js),
+  "a weather request that never answers is aborted so the retry can run");
 assert(/Every Night-look app gets its own dark frosted tile/.test(css) && /html\.theme-night \.app \.face/.test(css),
   "every app icon receives its own dark glass background in the home dock and drawer");
 assert(/html\.setting \.settings[\s\S]*?backdrop-filter: none !important/.test(css) && /html\.setting \.set-rows[\s\S]*?mask-image: none !important/.test(css),

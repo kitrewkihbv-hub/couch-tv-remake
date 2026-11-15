@@ -45,9 +45,9 @@
   "phone_remote": true,
   "ask": { "enabled": false },
   "weather": {
-    "lat": 47.6062,
-    "lon": -122.3321,
-    "place": "Seattle",
+    "lat": 45.6387,
+    "lon": -122.6615,
+    "place": "Vancouver, Washington",
     "timezone": "America/Los_Angeles"
   },
   "country": "US",

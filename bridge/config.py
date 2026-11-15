@@ -53,7 +53,7 @@ CONFIG, LOADED_FROM = _load()
 
 TVS = CONFIG["tvs"]
 DEFAULT_TV = CONFIG.get("default_tv") or TVS[0]["id"]
-WEATHER = {"lat": -33.8688, "lon": 151.2093, "place": "Sydney", "timezone": "Australia/Sydney",
+WEATHER = {"lat": 45.6387, "lon": -122.6615, "place": "Vancouver, Washington", "timezone": "America/Los_Angeles",
            **(CONFIG.get("weather") or {})}
 SCREENS = CONFIG.get("screens") or []
 BRIDGE = {"host": "your-computer.local", "port": 5400, "fallback_hosts": [], **(CONFIG.get("bridge") or {})}

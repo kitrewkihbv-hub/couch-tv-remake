@@ -117,7 +117,7 @@ curl -X POST http://<stick-ip>:5400/api/pair -H 'Content-Type: application/json'
   Amazon's and harmless.
 - **The setup screen remembers which button had focus.** Count your D-pad presses from what is
   highlighted, not from the left: it is easy to press Forget phones by mistake.
-- **Weather defaults to Sydney** until you set a place in Home settings or through the API.
+- **Weather defaults to Vancouver, Washington** until you set a place in Home settings or through the API.
 
 ## Undo
 

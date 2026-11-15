@@ -55,7 +55,17 @@
   // Settings from the bridge's config.json (served as config.js, and saved with the offline copy),
   // read in readConfig() once the page starts (mock.js fills them in for previews). See docs/CONFIG.md.
   var CFG = {}, HOME = {}, TVCFG = {}, QUICK = [];
-  var WXCFG = { lat: -33.8688, lon: 151.2093, place: "Sydney", timezone: "Australia/Sydney" };
+  var WX_FALLBACK = { lat: 45.6387, lon: -122.6615, place: "Vancouver, Washington", timezone: "America/Los_Angeles" };
+  // The place the weather is asked for. It only counts with real coordinates: a config.json or an
+  // older setup could carry a place name alone, and that used to send "latitude=undefined" to
+  // Open-Meteo, so the pill said "Weather unavailable" until a place was chosen in Home settings.
+  function validPlace(p) {
+    if (!p || p.lat == null || p.lon == null || p.lat === "" || p.lon === "") return null;
+    var lat = Number(p.lat), lon = Number(p.lon);
+    if (!isFinite(lat) || !isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+    return { lat: lat, lon: lon, place: String(p.place || p.name || ""), timezone: String(p.timezone || "auto") };
+  }
+  var WXCFG = WX_FALLBACK;
   var QUICK_ALL = ["sleep", "picture", "look", "soundscape", "screen_off", "headphones", "input", "bluetooth", "network", "tvsettings", "screensaver", "extend"];
   // The most personal photos this TV keeps (also MAX_PHOTOS in bridge/server.py and MainActivity.kt).
   var MAX_PHOTOS = 50;
@@ -372,9 +382,8 @@
     SMART_IDLE = normSmartIdle(ST.smart_idle || HOME.smart_idle);
     // the language: Home settings, then config.json, then the TV's own language if the home speaks it
     if (window.I18N) window.I18N.set(ST.lang || HOME.language || window.I18N.device());
-    if (CFG.weather) WXCFG = CFG.weather;
-    var pl = ST.place;
-    if (pl && isFinite(pl.lat) && isFinite(pl.lon)) WXCFG = { lat: pl.lat, lon: pl.lon, place: pl.name || "", timezone: pl.timezone || "auto" };
+    // A place chosen in Home settings wins over config.json; either one needs coordinates.
+    WXCFG = validPlace(ST.place) || validPlace(CFG.weather) || WX_FALLBACK;
     var wxSaved = cachedWeather();
     if (wxSaved) { data.weather = wxSaved; WEATHER_STATE = "cached"; }
     WX_SHOW = ST.wx_show !== false;
@@ -1127,14 +1136,34 @@
     return saved.weather;
   }
   function validWeather(j) { return !!(j && isFinite(Number(j.temp)) && isFinite(Number(j.code))); }
+  // A TV usually draws the home before Wi-Fi has finished connecting, so the first reading of the
+  // day often fails. Try again soon (10 s, 30 s, 1 min, 2 min, then every 5 min) instead of leaving
+  // "Weather unavailable" on screen until the next half-hourly refresh.
+  var WEATHER_RETRY_STEPS = [10, 30, 60, 120, 300], weatherTries = 0, weatherRetryTimer = null, weatherBusy = null;
+  function stopWeatherRetry() {
+    clearTimeout(weatherRetryTimer);
+    weatherRetryTimer = null;
+  }
+  function scheduleWeatherRetry() {
+    var seconds = WEATHER_RETRY_STEPS[Math.min(weatherTries, WEATHER_RETRY_STEPS.length - 1)];
+    weatherTries++;
+    stopWeatherRetry();
+    weatherRetryTimer = setTimeout(function () {
+      weatherRetryTimer = null;
+      refreshWeather();
+    }, seconds * 1000);
+  }
   function refreshWeather() {
     if (!WX_SHOW) {
+      stopWeatherRetry();
       data.weather = null;
       WEATHER_STATE = "off";
       clock();
       updateAmbientWeather();
       return Promise.resolve();
     }
+    // One request at a time: a retry, the half-hourly refresh and a resume can otherwise overlap.
+    if (weatherBusy) return weatherBusy;
     WEATHER_STATE = "loading";
     renderDockWeather();
     var customPlace = ST.place && isFinite(Number(ST.place.lat)) && isFinite(Number(ST.place.lon)) ? ST.place : null;
@@ -1143,17 +1172,19 @@
       "&place=" + encodeURIComponent(customPlace.name || "") + "&timezone=" + encodeURIComponent(customPlace.timezone || "auto");
     // Ask the bridge to fetch a chosen location server-side (the TV's WebView may block direct
     // cross-origin requests). When no bridge is online, fall back to Open-Meteo from the TV.
-    var request = OFFLINE ? (TV && TV.weather ? weatherNative() : weatherDirect())
+    var request = OFFLINE ? (TV && TV.weather ? weatherNative().catch(function () { return weatherDirect(true); }) : weatherDirect())
       : api("GET", path).then(function (j) {
         if (customPlace && customPlace.name && j.place && String(j.place).toLowerCase() !== String(customPlace.name).toLowerCase()) {
           throw new Error("Bridge returned weather for a different place");
         }
         return j;
       }).catch(function () { return weatherDirect(); });
-    return request.then(function (j) {
+    weatherBusy = request.then(function (j) {
       if (!validWeather(j)) throw new Error("Invalid weather response");
       data.weather = j;
       WEATHER_STATE = "ready";
+      weatherTries = 0;
+      stopWeatherRetry();
       keep(WEATHER_CACHE_KEY, { at: Date.now(), lat: Number(WXCFG.lat), lon: Number(WXCFG.lon), weather: j });
       clock();
       updateAmbientWeather();
@@ -1164,11 +1195,13 @@
         WEATHER_STATE = "cached";
       } else {
         WEATHER_STATE = "unavailable";
+        scheduleWeatherRetry();
         try { console.warn("[home weather]", err && err.message || err); } catch (e) {}
       }
       clock();
       updateAmbientWeather();
-    });
+    }).then(function () { weatherBusy = null; });
+    return weatherBusy;
   }
 
   // Open-Meteo (free, no key), the same call the bridge makes. The words come from i18n.js.
@@ -1210,12 +1243,17 @@
     51: "wx_drizzle", 53: "wx_drizzle", 55: "wx_drizzle", 56: "wx_drizzle", 57: "wx_drizzle", 61: "wx_light_rain",
     63: "wx_rain", 65: "wx_heavy_rain", 66: "wx_rain", 67: "wx_rain", 80: "wx_showers", 81: "wx_showers",
     82: "wx_heavy_showers", 95: "wx_storms", 96: "wx_storms", 99: "wx_storms" };
-  function weatherDirect() {
-    if (typeof fetch !== "function") return TV && TV.weather ? weatherNative() : Promise.reject(new Error("This TV cannot fetch weather directly"));
+  function weatherDirect(nativeFallback) {
+    if (typeof fetch !== "function") return TV && TV.weather && !nativeFallback ? weatherNative() : Promise.reject(new Error("This TV cannot fetch weather directly"));
     var url = "https://api.open-meteo.com/v1/forecast?latitude=" + WXCFG.lat + "&longitude=" + WXCFG.lon +
       "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=" +
       encodeURIComponent(WXCFG.timezone || "auto") + "&forecast_days=5";
-    return fetch(url, { cache: "no-store" }).then(function (r) {
+    // Give up after ten seconds instead of leaving the pill on "Loading weather" with a request that
+    // never answers (a TV whose Wi-Fi is half connected), so the retry above can take over.
+    var control = typeof AbortController === "function" ? new AbortController() : null;
+    var giveUp = control ? setTimeout(function () { control.abort(); }, 10000) : null;
+    var done = function (v) { clearTimeout(giveUp); return v; };
+    return fetch(url, control ? { cache: "no-store", signal: control.signal } : { cache: "no-store" }).then(function (r) {
       if (!r.ok) throw new Error("Weather service returned " + r.status);
       return r.json();
     }).then(function (j) {
@@ -1228,9 +1266,10 @@
         forecast.push({ date: dates[i], high: highs[i] == null ? null : Math.round(highs[i]),
           low: lows[i] == null ? null : Math.round(lows[i]), code: codes[i] == null ? -1 : Math.round(codes[i]) });
       }
-      return { temp: Math.round(c.temperature_2m), code: code, text: "", is_day: !!c.is_day, forecast: forecast };
+      return done({ temp: Math.round(c.temperature_2m), code: code, text: "", is_day: !!c.is_day, forecast: forecast });
     }).catch(function (err) {
-      if (TV && TV.weather) return weatherNative();
+      clearTimeout(giveUp);
+      if (TV && TV.weather && !nativeFallback) return weatherNative();
       throw err;
     });
   }
@@ -2940,6 +2979,22 @@
 
   // ---------------- focus ----------------
   var paintedFocusEl = null, appFramePending = false;
+  // The lift and scale are fixed in app.css; read them once (and on resize) instead of asking for
+  // the root's computed style on every D-pad press, which forces a style recalculation mid-navigation.
+  var focusScale = 1.045, focusLiftPx = -0.375 * (innerWidth / 120), focusFontPx = innerWidth / 120;
+  function readFocusMetrics() {
+    focusFontPx = innerWidth / 120;
+    focusScale = 1.045;
+    focusLiftPx = -0.375 * focusFontPx;
+    if (!window.getComputedStyle) return;
+    var rootStyle = window.getComputedStyle(document.documentElement);
+    var scale = parseFloat(rootStyle.getPropertyValue("--app-focus-scale"));
+    var liftRem = parseFloat(rootStyle.getPropertyValue("--app-focus-lift"));
+    var fontPx = parseFloat(rootStyle.fontSize);
+    if (isFinite(fontPx) && fontPx > 0) focusFontPx = fontPx;
+    if (isFinite(scale) && scale > 0) focusScale = scale;
+    if (isFinite(liftRem)) focusLiftPx = liftRem * focusFontPx;
+  }
   function placeAppFocusFrame(el) {
     var frame = $("app-focus-frame");
     if (!frame) return;
@@ -2963,16 +3018,11 @@
       if (!face) { frame.classList.remove("on"); return; }
       var box = face.getBoundingClientRect();
       var faceWidth = face.offsetWidth || box.width, faceHeight = face.offsetHeight || box.height;
-      var rootStyle = window.getComputedStyle ? window.getComputedStyle(document.documentElement) : null;
-      var scale = rootStyle ? parseFloat(rootStyle.getPropertyValue("--app-focus-scale")) : 1.045;
-      var liftRem = rootStyle ? parseFloat(rootStyle.getPropertyValue("--app-focus-lift")) : -0.375;
-      if (!isFinite(scale) || scale <= 0) scale = 1.045;
-      if (!isFinite(liftRem)) liftRem = -0.375;
-      var liftPx = liftRem * (innerWidth / 120);
+      var scale = focusScale, liftPx = focusLiftPx;
       // The app is still part-way through its lift transition when this RAF runs. Use the
       // transformed artwork center, subtract its current Y translation, then place the outline
       // at the final lifted/scaled center instead of the old untransformed box.
-      var currentY = 0, transform = rootStyle && window.getComputedStyle(current).transform;
+      var currentY = 0, transform = window.getComputedStyle ? window.getComputedStyle(current).transform : "";
       if (!transform || transform === "none") { scale = 1; liftPx = 0; }
       if (transform && transform.indexOf("matrix3d(") === 0) {
         var m3 = transform.slice(9, -1).split(","); currentY = parseFloat(m3[13]) || 0;
@@ -2999,7 +3049,7 @@
     if (el) el.classList.add("focus");
     placeAppFocusFrame(el);
   }
-  window.addEventListener("resize", function () { placeAppFocusFrame(paintedFocusEl); });
+  window.addEventListener("resize", function () { readFocusMetrics(); placeAppFocusFrame(paintedFocusEl); });
   function clearFocus() {
     paintedFocusEl = null;
     placeAppFocusFrame(null);
@@ -3514,7 +3564,7 @@
   var SET = { col: "secs", sec: 0, ri: 0, keyFocus: null, sub: null, lift: null, confirm: null, dirty: false, typing: null,
     msg: "", geo: { q: "", list: null, busy: false, err: false } };
   var REPO_URL = "github.com/Seagey/couch-tv";
-  var WX_DEFAULT = { lat: -33.8688, lon: 151.2093, place: "Sydney", timezone: "Australia/Sydney" };
+  var WX_DEFAULT = WX_FALLBACK;
   var pushTimer = null;
 
   function loadSettings() {
@@ -3648,7 +3698,7 @@
     if (ST.place) {
       rows.push({ kind: "action", key: "loc-reset", label: t("loc_reset"), act: function () {
         delete ST.place;
-        WXCFG = CFG.weather || WX_DEFAULT;
+        WXCFG = validPlace(CFG.weather) || WX_DEFAULT;
         saveSettings();
         SET.msg = t("loc_set", { place: WXCFG.place || "" });
       } });
@@ -3724,7 +3774,7 @@
   }
   function choosePlace(p) {
     ST.place = { name: p.name, lat: p.lat, lon: p.lon, timezone: p.timezone };
-    WXCFG = { lat: p.lat, lon: p.lon, place: p.name, timezone: p.timezone };
+    WXCFG = validPlace(ST.place) || WX_FALLBACK;
     saveSettings();
     SET.msg = t("loc_set", { place: p.name });
     data.weather = null;
@@ -5146,6 +5196,7 @@
     initSettings();
     // Home settings gets an Updates section, before About, where the launcher can update itself
     if (updRead() && UPD.supported) SECS.splice(SECS.length - 1, 0, ["updates", "download"]);
+    readFocusMetrics();
     mark("app-start");
     clock();
     setInterval(clock, 15000);

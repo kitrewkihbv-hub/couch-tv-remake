@@ -5,7 +5,7 @@
     { "id": "person1", "name": "Person 1" },
     { "id": "person2", "name": "Person 2" }
   ],
-  "weather": { "lat": -33.8688, "lon": 151.2093, "place": "Sydney", "timezone": "Australia/Sydney" },
+  "weather": { "lat": 45.6387, "lon": -122.6615, "place": "Vancouver, Washington", "timezone": "America/Los_Angeles" },
   "country": "AU",
   "ask_enabled": false,
   "ask_key": ""

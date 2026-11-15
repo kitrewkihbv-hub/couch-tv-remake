@@ -2328,9 +2328,9 @@ async def h_weather(request):
         try:
             lat, lon = float(lat), float(lon)
         except (TypeError, ValueError):
-            raise ApiError(400, "latitude and longitude must be numbers")
+            raise ApiError(400, "latitude and longitude must be numbers", key="err_weather_location_invalid")
         if not (-90 <= lat <= 90 and -180 <= lon <= 180):
-            raise ApiError(400, "weather location is outside the valid range")
+            raise ApiError(400, "weather location is outside the valid range", key="err_weather_location_invalid")
         timezone_name = request.query.get("timezone", "auto")[:100]
         if not re.fullmatch(r"[A-Za-z0-9_+./-]+", timezone_name):
             timezone_name = "auto"
