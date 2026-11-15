@@ -255,11 +255,12 @@
         // Weather is synthetic here so the dock pill and idle ambient preview work without an API key
         // or depending on the preview user's location/network.
         if (path.indexOf("/api/weather") === 0) {
-          var forecast = [], today = new Date(), wxCodes = [2, 1, 3, 61, 0];
+          var forecast = [], now = new Date(), wxCodes = [2, 1, 3, 61, 0];
           for (var wi = 0; wi < 5; wi++) {
-            var wd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + wi);
-            var date = wd.getFullYear() + "-" + (wd.getMonth() < 9 ? "0" : "") + (wd.getMonth() + 1) + "-" + (wd.getDate() < 10 ? "0" : "") + wd.getDate();
-            forecast.push({ date: date, high: 18 - wi, low: 9 - wi, code: wxCodes[wi] });
+            var hd = new Date(now.getTime() + (wi + 1) * 3600000);
+            var hh = hd.getHours(), mm = hd.getMinutes();
+            var date = hd.getFullYear() + "-" + String(hd.getMonth()+1).padStart(2,"0") + "-" + String(hd.getDate()).padStart(2,"0") + "T" + String(hh).padStart(2,"0") + ":00";
+            forecast.push({ date: date, temp: 18 - wi, high: 18 - wi, low: null, code: wxCodes[wi] });
           }
           return resolve({ ok: true, temp: 15, code: 2, text: "Partly cloudy", is_day: true, forecast: forecast });
         }

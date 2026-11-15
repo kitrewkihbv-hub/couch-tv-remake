@@ -64,15 +64,15 @@ const renderExpanded = new Function("$", "WX_SHOW", "data", "expanded", "WXCFG",
 renderExpanded();
 assert(!node.classList.contains("on"), "the weather pill is hidden while the expanded app library is open");
 
-const forecast = Array.from({ length: 5 }, (_, i) => ({ date: `2026-11-${String(14 + i).padStart(2, "0")}`, high: 63 - i, low: 47 - i, code: [0, 2, 3, 61, 95][i] }));
+const forecast = Array.from({ length: 5 }, (_, i) => ({ date: `2026-11-14T${String(12 + i).padStart(2, "0")}:00`, temp: 63 - i, high: 63 - i, code: [0, 2, 3, 61, 95][i] }));
 const renderIdleForecast = new Function("$", "WX_SHOW", "window", "wxIcon", "esc", "tempText",
   sourceOf("renderIdleForecast") + "; return renderIdleForecast;")(
     lookup, true, { I18N: { locale: () => "en-US" } }, w => `<svg data-code="${w.code}"></svg>`, String, value => value + "°");
 renderIdleForecast({ forecast });
-assert(forecastNode.classList.contains("on"), "the ambient forecast panel is shown when forecast days exist");
-assert.strictEqual((forecastNode.innerHTML.match(/idle-forecast-day/g) || []).length, 5, "the forecast box shows five days");
-assert(forecastNode.innerHTML.includes("data-code=\"95\""), "each day shows its weather glyph");
-assert(forecastNode.innerHTML.includes("63°") && forecastNode.innerHTML.includes("43°"), "the forecast shows daily high and low temperatures");
+assert(forecastNode.classList.contains("on"), "the ambient forecast panel is shown when forecast exists");
+assert.strictEqual((forecastNode.innerHTML.match(/idle-forecast-day/g) || []).length, 5, "the forecast box shows five hours");
+assert(forecastNode.innerHTML.includes("data-code=\"95\""), "each hour shows its weather glyph");
+assert(forecastNode.innerHTML.includes("63°") && forecastNode.innerHTML.includes("59°"), "the forecast shows hourly temperatures");
 renderIdleForecast(null);
 assert(!forecastNode.classList.contains("on"), "the ambient forecast box hides cleanly if weather is disabled or absent");
 

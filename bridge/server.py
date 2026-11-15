@@ -2258,8 +2258,9 @@ async def _fetch_weather(location, timezone_name):
     params = urllib.parse.urlencode({
         "latitude": location["lat"], "longitude": location["lon"],
         "current": "temperature_2m,weather_code,is_day",
+        "hourly": "temperature_2m,weather_code",
         "daily": "temperature_2m_max,temperature_2m_min,weather_code",
-        "timezone": timezone_name or "auto", "forecast_days": 5,
+        "timezone": timezone_name or "auto", "forecast_days": 5, "forecast_hours": 12,
     })
     url = "https://api.open-meteo.com/v1/forecast?" + params
     try:
@@ -2271,15 +2272,45 @@ async def _fetch_weather(location, timezone_name):
         cur, day = payload["current"], payload.get("daily", {})
         code = int(cur.get("weather_code", -1))
         highs, lows, codes = day.get("temperature_2m_max", []), day.get("temperature_2m_min", []), day.get("weather_code", [])
+        # Hourly forecast for the next 5 hours (instead of 5 days)
+        hourly = payload.get("hourly", {})
+        h_times = hourly.get("time") or []
+        h_temps = hourly.get("temperature_2m") or []
+        h_codes = hourly.get("weather_code") or []
         forecast = []
-        for i, date in enumerate(day.get("time", [])[:5]):
-            daily_code = int(codes[i]) if i < len(codes) and codes[i] is not None else -1
+        # Find the hour after current time
+        cur_time = cur.get("time", "")
+        start = 0
+        if cur_time and h_times:
+            try:
+                start = h_times.index(cur_time) + 1
+            except ValueError:
+                for idx, ht in enumerate(h_times):
+                    if ht > cur_time:
+                        start = idx
+                        break
+        # Take next 5 hours
+        for i in range(start, min(start + 5, len(h_times))):
+            ht = h_times[i] if i < len(h_times) else ""
+            temp = h_temps[i] if i < len(h_temps) else None
+            hcode = h_codes[i] if i < len(h_codes) else None
             forecast.append({
-                "date": date,
-                "high": round(highs[i]) if i < len(highs) and highs[i] is not None else None,
-                "low": round(lows[i]) if i < len(lows) and lows[i] is not None else None,
-                "code": daily_code,
+                "date": ht,
+                "temp": round(temp) if isinstance(temp, (int, float)) else None,
+                "high": round(temp) if isinstance(temp, (int, float)) else None,
+                "low": None,
+                "code": int(hcode) if isinstance(hcode, (int, float)) else -1,
             })
+        # Fallback to daily if hourly unavailable
+        if not forecast:
+            for i, date in enumerate(day.get("time", [])[:5]):
+                daily_code = int(codes[i]) if i < len(codes) and codes[i] is not None else -1
+                forecast.append({
+                    "date": date,
+                    "high": round(highs[i]) if i < len(highs) and highs[i] is not None else None,
+                    "low": round(lows[i]) if i < len(lows) and lows[i] is not None else None,
+                    "code": daily_code,
+                })
         return {
             "place": location["place"], "temp": round(cur["temperature_2m"]),
             "code": code, "text": WMO.get(code, ""), "is_day": bool(cur.get("is_day")),

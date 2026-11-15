@@ -668,23 +668,32 @@
   function renderIdleForecast(weather) {
     var el = $("idle-forecast");
     if (!el) return;
-    var days = weather && WX_SHOW && Array.isArray(weather.forecast) ? weather.forecast.slice(0, 5) : [];
-    if (!days.length) {
+    var hours = weather && WX_SHOW && Array.isArray(weather.forecast) ? weather.forecast.slice(0, 5) : [];
+    if (!hours.length) {
       el.classList.remove("on");
       el.innerHTML = "";
       return;
     }
     var locale = window.I18N ? window.I18N.locale() : "en-US";
-    el.innerHTML = days.map(function (day) {
+    el.innerHTML = hours.map(function (h) {
       var label = "";
-      if (day.date && /^\d{4}-\d{2}-\d{2}$/.test(day.date)) {
-        var p = day.date.split("-");
-        label = new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString(locale, { weekday: "short" });
+      if (h.date) {
+        // Hourly: "2025-11-14T14:00" -> "2 PM" / "14:00" ; Daily fallback: "2025-11-14" -> weekday
+        if (/T/.test(h.date)) {
+          var d = new Date(h.date);
+          if (!isNaN(d.getTime())) {
+            var use24 = typeof CLOCK24 !== "undefined" ? CLOCK24 : false;
+            try { label = d.toLocaleTimeString(locale, { hour: "numeric", hour12: !use24 }); } catch(e) { label = d.getHours() + ":00"; }
+          }
+        } else if (/^\d{4}-\d{2}-\d{2}$/.test(h.date)) {
+          var p = h.date.split("-");
+          label = new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString(locale, { weekday: "short" });
+        }
       }
+      var temp = h.temp != null ? h.temp : h.high;
       return '<div class="idle-forecast-day" role="listitem"><span class="idle-forecast-name">' + esc(label) +
-        '</span><span class="idle-forecast-icon" aria-hidden="true">' + wxIcon({ code: Number(day.code) || 0, is_day: true }) +
-        '</span><b>' + (day.high == null ? "–" : esc(tempText(Number(day.high)))) +
-        '</b><small>' + (day.low == null ? "–" : esc(tempText(Number(day.low)))) + '</small></div>';
+        '</span><span class="idle-forecast-icon" aria-hidden="true">' + wxIcon({ code: Number(h.code) || 0, is_day: true }) +
+        '</span><b>' + (temp == null ? "–" : esc(tempText(Number(temp)))) + '</b></div>';
     }).join("");
     el.classList.add("on");
   }
@@ -1269,8 +1278,8 @@
   function weatherDirect(nativeFallback) {
     if (typeof fetch !== "function") return TV && TV.weather && !nativeFallback ? weatherNative() : Promise.reject(new Error("This TV cannot fetch weather directly"));
     var url = "https://api.open-meteo.com/v1/forecast?latitude=" + WXCFG.lat + "&longitude=" + WXCFG.lon +
-      "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=" +
-      encodeURIComponent(WXCFG.timezone || "auto") + "&forecast_days=5";
+      "&current=temperature_2m,weather_code,is_day&hourly=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=" +
+      encodeURIComponent(WXCFG.timezone || "auto") + "&forecast_days=5&forecast_hours=12";
     // Give up after ten seconds instead of leaving the pill on "Loading weather" with a request that
     // never answers (a TV whose Wi-Fi is half connected), so the retry above can take over.
     var control = typeof AbortController === "function" ? new AbortController() : null;
@@ -1283,11 +1292,27 @@
       if (!j || !j.current || !isFinite(Number(j.current.temperature_2m)) || !isFinite(Number(j.current.weather_code))) {
         throw new Error("Weather service returned incomplete data");
       }
-      var c = j.current, d = j.daily || {}, code = Math.round(c.weather_code), forecast = [];
-      var dates = d.time || [], highs = d.temperature_2m_max || [], lows = d.temperature_2m_min || [], codes = d.weather_code || [];
-      for (var i = 0; i < Math.min(5, dates.length); i++) {
-        forecast.push({ date: dates[i], high: highs[i] == null ? null : Math.round(highs[i]),
-          low: lows[i] == null ? null : Math.round(lows[i]), code: codes[i] == null ? -1 : Math.round(codes[i]) });
+      var c = j.current, d = j.daily || {}, h = j.hourly || {}, code = Math.round(c.weather_code), forecast = [];
+      var hTimes = h.time || [], hTemps = h.temperature_2m || [], hCodes = h.weather_code || [];
+      var curTime = c.time || "";
+      var start = 0;
+      if (curTime && hTimes.length) {
+        var idx = hTimes.indexOf(curTime);
+        if (idx >= 0) start = idx + 1;
+        else {
+          for (var k = 0; k < hTimes.length; k++) { if (hTimes[k] > curTime) { start = k; break; } }
+        }
+      }
+      for (var i = start; i < Math.min(start + 5, hTimes.length); i++) {
+        forecast.push({ date: hTimes[i], temp: hTemps[i] == null ? null : Math.round(hTemps[i]),
+          high: hTemps[i] == null ? null : Math.round(hTemps[i]), low: null, code: hCodes[i] == null ? -1 : Math.round(hCodes[i]) });
+      }
+      if (!forecast.length) {
+        var dates = d.time || [], highs = d.temperature_2m_max || [], lows = d.temperature_2m_min || [], codes = d.weather_code || [];
+        for (var i = 0; i < Math.min(5, dates.length); i++) {
+          forecast.push({ date: dates[i], high: highs[i] == null ? null : Math.round(highs[i]),
+            low: lows[i] == null ? null : Math.round(lows[i]), code: codes[i] == null ? -1 : Math.round(codes[i]) });
+        }
       }
       return done({ temp: Math.round(c.temperature_2m), code: code, text: "", is_day: !!c.is_day, forecast: forecast });
     }).catch(function (err) {
